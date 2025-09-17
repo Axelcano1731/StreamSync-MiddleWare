@@ -28,66 +28,77 @@ Requisitos previos
 
 Antes de comenzar, asegúrate de tener instalado:
 
-Node.js
- (v18 o superior)
+## Requisitos previos
 
-npm
- o Yarn
+- **Node.js** (v18 o superior)  
+- **npm** o **Yarn**  
+- Una cuenta de TikTok con transmisión en vivo activa (nombre de usuario sin `@`)
 
-Una cuenta de TikTok con transmisión en vivo activa (nombre de usuario sin @)
-
-Instalación
+## Instalación
 
 Sigue estos pasos para clonar y ejecutar el proyecto localmente:
 
-1️⃣ Clonar el repositorio
+1. Clonar el repositorio
+```bash
 git clone https://github.com/tu-usuario/streamsync-tiktok.git
 cd streamsync-tiktok
+```
 
 2️⃣ Instalar dependencias
 Backend
+```bash
 cd backend
 npm install
+```
 
 Frontend
+```bash
 cd ../frontend
 npm install
+```
 
 3️⃣ Configuración del backend
 
 Edita el archivo server.js en la carpeta backend y coloca tu nombre de usuario de TikTok:
 
+```bash 
 const tiktokUsername = 'TU_USUARIO_TIKTOK';
+```
 
 
 ⚠️ Importante: No coloques el símbolo @, solo el nombre de usuario.
 
 4️⃣ Iniciar los servidores
 Backend
+```bash 
 cd backend
 npm run dev
+```
 
 
 El backend se ejecutará en:
-
+```bash 
 http://localhost:3000
+```
 
 Frontend
 
 En otra terminal:
-
+```bash 
 cd frontend
 npm start
+```
 
 
 El frontend se ejecutará en:
-
+```bash 
 http://localhost:5173
-
+```
 
 El puerto puede variar dependiendo de la configuración de Vite.
 
 Estructura del proyecto
+```bash 
 streamsync-tiktok/
 │
 ├── backend/                # Servidor Node.js
@@ -104,7 +115,7 @@ streamsync-tiktok/
 │   └── ...
 │
 └── README.md
-
+```
 Flujo de datos
 
 TikTok Live Connector escucha eventos en vivo de TikTok:
