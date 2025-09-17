@@ -116,65 +116,71 @@ streamsync-tiktok/
 │
 └── README.md
 ```
-Flujo de datos
+## 🔄 Flujo de datos
 
-TikTok Live Connector escucha eventos en vivo de TikTok:
+El sistema funciona en tres capas principales:
 
-Likes
+1. **TikTok Live Connector**  
+   Escucha en tiempo real los eventos de la transmisión (likes, mensajes, seguidores y regalos).
 
-Mensajes
+2. **Backend (Node.js + Socket.IO)**  
+   Recibe los eventos capturados y los normaliza. Luego los emite hacia el frontend mediante **WebSockets**.
 
-Seguidores
+3. **Frontend (React + Tailwind)**  
+   Muestra los eventos al usuario en tiempo real dentro de una interfaz tipo chat.
 
-Donaciones
+---
 
-El backend recibe estos eventos y los envía al frontend mediante Socket.IO.
+### 📡 Eventos disponibles
 
-El frontend React los muestra en tiempo real en una interfaz tipo chat.
+| Evento  | Descripción |
+|---------|-------------|
+| `like`  | Se dispara cuando un usuario envía un ❤️ like. |
+| `chat`  | Cuando alguien envía un 💬 mensaje en el chat. |
+| `follow`| Cuando un usuario comienza a seguir la cuenta. |
+| `gift`  | Cuando alguien envía un 🎁 regalo durante la transmisión. |
 
-Eventos disponibles
-Evento	Descripción
-like	Cuando un usuario envía un like
-chat	Cuando alguien envía un mensaje
-follow	Cuando un usuario sigue la cuenta
-gift	Cuando alguien envía un regalo
-Personalización
+---
 
-Si deseas modificar el diseño:
+## 🎨 Personalización
 
-Edita los componentes en la carpeta frontend/src/.
+- Edita los componentes en la carpeta **`frontend/src/`**.  
+- Ajusta los estilos con **TailwindCSS** o clases personalizadas.  
+- Puedes agregar animaciones, alertas en pantalla o paneles de estadísticas según tu necesidad.  
 
-Ajusta estilos con TailwindCSS o clases personalizadas.
+---
 
-Problemas comunes
-Problema	Solución
-CORS error en el frontend	Asegúrate de que el backend esté corriendo en el puerto 3000 y que ambos estén conectados correctamente.
-Error conectando al Live	Verifica el nombre de usuario de TikTok y que estés transmitiendo en vivo.
-No cargan mensajes en el frontend	Comprueba que Socket.IO esté emitiendo eventos desde el backend.
-npm run dev no inicia	Asegúrate de estar en la carpeta correcta y haber ejecutado npm install.
-Futuras mejoras
+## ⚠️ Problemas comunes
 
-📊 Panel de estadísticas en tiempo real.
+| Problema | Posible solución |
+|----------|------------------|
+| **CORS error en el frontend** | Asegúrate de que el backend esté en el puerto `3000` y que ambos servicios estén conectados correctamente. |
+| **Error conectando al Live** | Verifica el nombre de usuario de TikTok y que la transmisión en vivo esté activa. |
+| **No cargan mensajes en el frontend** | Comprueba que **Socket.IO** esté emitiendo eventos desde el backend. |
+| **`npm run dev` no inicia** | Verifica que estés en la carpeta correcta y hayas ejecutado `npm install`. |
 
-🔔 Sistema de alertas para donaciones y seguidores.
+---
 
-💾 Guardar eventos en base de datos.
+## 🚀 Futuras mejoras
 
-🌍 Despliegue en producción (Vercel/Render).
+- 📊 Panel de **estadísticas en tiempo real**.  
+- 🔔 Sistema de **alertas visuales y sonoras** para donaciones y seguidores.  
+- 💾 **Persistencia en base de datos** para guardar los eventos.  
+- 🌍 **Despliegue en producción** con Vercel, Render o similares.  
 
-Licencia
+---
 
-Este proyecto se distribuye bajo la licencia MIT.
+## 📜 Licencia
+
+Este proyecto se distribuye bajo la licencia **MIT**.  
 Puedes usarlo y modificarlo libremente para tus proyectos personales o comerciales.
 
-Créditos
+---
 
-Autores: Axel Cano y Wiliam Gazabon
+## 👥 Créditos
 
-Librerías clave:
-
-tiktok-live-connector
-
-Socket.IO
-
-React
+- **Autores:** Axel Cano y Wiliam Gazabon  
+- **Librerías clave:**  
+  - [tiktok-live-connector](https://github.com/zerodytrash/TikTok-Live-Connector)  
+  - [Socket.IO](https://socket.io/)  
+  - [React](https://reactjs.org/)  
