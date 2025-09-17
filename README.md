@@ -5,17 +5,17 @@ Este proyecto utiliza Node.js, Socket.IO, React, y la librería tiktok-live-conn
 
 Características principales
 
-📡 Conexión en tiempo real a TikTok Live.
+📡 Conexión en tiempo real a TikTok Live
 
-❤️ Muestra de likes en vivo.
+❤️ Muestra de likes en vivo
 
-💬 Visualización de mensajes del chat en tiempo real.
+💬 Visualización de mensajes del chat en tiempo real
 
-➕ Notificaciones de nuevos seguidores.
+➕ Notificaciones de nuevos seguidores
 
-🎁 Registro de donaciones con detalles completos.
+🎁 Registro de donaciones con detalles completos
 
-⚡ Actualización instantánea en el frontend con Socket.IO.
+⚡ Actualización instantánea en el frontend con Socket.IO
 
 Tecnologías utilizadas
 Tecnología	Uso en el proyecto
@@ -29,47 +29,48 @@ Requisitos previos
 Antes de comenzar, asegúrate de tener instalado:
 
 Node.js
- ```(v18 o superior)```
+ (v18 o superior)
 
 npm
- ```o Yarn```
+ o Yarn
 
-TikTok con transmisión en vivo activa (nombre de usuario sin @)
+Una cuenta de TikTok con transmisión en vivo activa (nombre de usuario sin @)
 
 Instalación
 
 Sigue estos pasos para clonar y ejecutar el proyecto localmente:
 
 1️⃣ Clonar el repositorio
-```git clone https://github.com/tu-usuario/streamsync-tiktok.git
-cd streamsync-tiktok```
+git clone https://github.com/tu-usuario/streamsync-tiktok.git
+cd streamsync-tiktok
 
 2️⃣ Instalar dependencias
 Backend
-```cd backend
-npm install```
+cd backend
+npm install
 
 Frontend
-```cd ../frontend
-npm install```
+cd ../frontend
+npm install
 
 3️⃣ Configuración del backend
 
 Edita el archivo server.js en la carpeta backend y coloca tu nombre de usuario de TikTok:
 
-```const tiktokUsername = 'TU_USUARIO_TIKTOK';```
+const tiktokUsername = 'TU_USUARIO_TIKTOK';
 
 
 ⚠️ Importante: No coloques el símbolo @, solo el nombre de usuario.
 
 4️⃣ Iniciar los servidores
 Backend
-```cd backend
-npm run dev```
+cd backend
+npm run dev
 
 
 El backend se ejecutará en:
-📡 ```http://localhost:3000```
+
+http://localhost:3000
 
 Frontend
 
@@ -80,11 +81,14 @@ npm start
 
 
 El frontend se ejecutará en:
-🌍 ```http://localhost:5173```
- (o el puerto que Vite asigne).
+
+http://localhost:5173
+
+
+El puerto puede variar dependiendo de la configuración de Vite.
 
 Estructura del proyecto
-```streamsync-tiktok/
+streamsync-tiktok/
 │
 ├── backend/                # Servidor Node.js
 │   ├── server.js           # Código principal del servidor
@@ -99,7 +103,7 @@ Estructura del proyecto
 │   ├── package.json
 │   └── ...
 │
-└── README.md```
+└── README.md
 
 Flujo de datos
 
@@ -127,16 +131,16 @@ Personalización
 
 Si deseas modificar el diseño:
 
-Edita los componentes en frontend/src/.
+Edita los componentes en la carpeta frontend/src/.
 
 Ajusta estilos con TailwindCSS o clases personalizadas.
 
 Problemas comunes
 Problema	Solución
-CORS error en el frontend	Asegúrate que el backend esté corriendo en el puerto 3000 y que ambos estén conectados correctamente.
+CORS error en el frontend	Asegúrate de que el backend esté corriendo en el puerto 3000 y que ambos estén conectados correctamente.
 Error conectando al Live	Verifica el nombre de usuario de TikTok y que estés transmitiendo en vivo.
 No cargan mensajes en el frontend	Comprueba que Socket.IO esté emitiendo eventos desde el backend.
-npm run dev no inicia	Asegúrate de estar en la carpeta correcta y haber hecho npm install.
+npm run dev no inicia	Asegúrate de estar en la carpeta correcta y haber ejecutado npm install.
 Futuras mejoras
 
 📊 Panel de estadísticas en tiempo real.
@@ -154,9 +158,12 @@ Puedes usarlo y modificarlo libremente para tus proyectos personales o comercial
 
 Créditos
 
-Autor: Axel Cano y Wiliam Gazabon
+Autores: Axel Cano y Wiliam Gazabon
 
-Librerías clave: tiktok-live-connector
-, Socket.IO
-, React
-.
+Librerías clave:
+
+tiktok-live-connector
+
+Socket.IO
+
+React
