@@ -5,17 +5,17 @@ Este proyecto utiliza Node.js, Socket.IO, React, y la librería tiktok-live-conn
 
 Características principales
 
-📡 Conexión en tiempo real a TikTok Live.
+📡 Conexión en tiempo real a TikTok Live
 
-❤️ Muestra de likes en vivo.
+❤️ Muestra de likes en vivo
 
-💬 Visualización de mensajes del chat en tiempo real.
+💬 Visualización de mensajes del chat en tiempo real
 
-➕ Notificaciones de nuevos seguidores.
+➕ Notificaciones de nuevos seguidores
 
-🎁 Registro de donaciones con detalles completos.
+🎁 Registro de donaciones con detalles completos
 
-⚡ Actualización instantánea en el frontend con Socket.IO.
+⚡ Actualización instantánea en el frontend con Socket.IO
 
 Tecnologías utilizadas
 Tecnología	Uso en el proyecto
@@ -28,63 +28,78 @@ Requisitos previos
 
 Antes de comenzar, asegúrate de tener instalado:
 
-Node.js
- ```(v18 o superior)```
+## Requisitos previos
 
-npm
- ```o Yarn```
+- **Node.js** (v18 o superior)  
+- **npm** o **Yarn**  
+- Una cuenta de TikTok con transmisión en vivo activa (nombre de usuario sin `@`)
 
-TikTok con transmisión en vivo activa (nombre de usuario sin @)
-
-Instalación
+## Instalación
 
 Sigue estos pasos para clonar y ejecutar el proyecto localmente:
 
-1️⃣ Clonar el repositorio
-```git clone https://github.com/tu-usuario/streamsync-tiktok.git
-cd streamsync-tiktok```
+1. Clonar el repositorio
+```bash
+git clone https://github.com/tu-usuario/streamsync-tiktok.git
+cd streamsync-tiktok
+```
 
 2️⃣ Instalar dependencias
 Backend
-```cd backend
-npm install```
+```bash
+cd backend
+npm install
+```
 
 Frontend
-```cd ../frontend
-npm install```
+```bash
+cd ../frontend
+npm install
+```
 
 3️⃣ Configuración del backend
 
 Edita el archivo server.js en la carpeta backend y coloca tu nombre de usuario de TikTok:
 
-```const tiktokUsername = 'TU_USUARIO_TIKTOK';```
+```bash 
+const tiktokUsername = 'TU_USUARIO_TIKTOK';
+```
 
 
 ⚠️ Importante: No coloques el símbolo @, solo el nombre de usuario.
 
 4️⃣ Iniciar los servidores
 Backend
-```cd backend
-npm run dev```
+```bash 
+cd backend
+npm run dev
+```
 
 
 El backend se ejecutará en:
-📡 ```http://localhost:3000```
+```bash 
+http://localhost:3000
+```
 
 Frontend
 
 En otra terminal:
-
+```bash 
 cd frontend
 npm start
+```
 
 
 El frontend se ejecutará en:
-🌍 ```http://localhost:5173```
- (o el puerto que Vite asigne).
+```bash 
+http://localhost:5173
+```
+
+El puerto puede variar dependiendo de la configuración de Vite.
 
 Estructura del proyecto
-```streamsync-tiktok/
+```bash 
+streamsync-tiktok/
 │
 ├── backend/                # Servidor Node.js
 │   ├── server.js           # Código principal del servidor
@@ -99,64 +114,73 @@ Estructura del proyecto
 │   ├── package.json
 │   └── ...
 │
-└── README.md```
+└── README.md
+```
+## 🔄 Flujo de datos
 
-Flujo de datos
+El sistema funciona en tres capas principales:
 
-TikTok Live Connector escucha eventos en vivo de TikTok:
+1. **TikTok Live Connector**  
+   Escucha en tiempo real los eventos de la transmisión (likes, mensajes, seguidores y regalos).
 
-Likes
+2. **Backend (Node.js + Socket.IO)**  
+   Recibe los eventos capturados y los normaliza. Luego los emite hacia el frontend mediante **WebSockets**.
 
-Mensajes
+3. **Frontend (React + Tailwind)**  
+   Muestra los eventos al usuario en tiempo real dentro de una interfaz tipo chat.
 
-Seguidores
+---
 
-Donaciones
+### 📡 Eventos disponibles
 
-El backend recibe estos eventos y los envía al frontend mediante Socket.IO.
+| Evento  | Descripción |
+|---------|-------------|
+| `like`  | Se dispara cuando un usuario envía un ❤️ like. |
+| `chat`  | Cuando alguien envía un 💬 mensaje en el chat. |
+| `follow`| Cuando un usuario comienza a seguir la cuenta. |
+| `gift`  | Cuando alguien envía un 🎁 regalo durante la transmisión. |
 
-El frontend React los muestra en tiempo real en una interfaz tipo chat.
+---
 
-Eventos disponibles
-Evento	Descripción
-like	Cuando un usuario envía un like
-chat	Cuando alguien envía un mensaje
-follow	Cuando un usuario sigue la cuenta
-gift	Cuando alguien envía un regalo
-Personalización
+## 🎨 Personalización
 
-Si deseas modificar el diseño:
+- Edita los componentes en la carpeta **`frontend/src/`**.  
+- Ajusta los estilos con **TailwindCSS** o clases personalizadas.  
+- Puedes agregar animaciones, alertas en pantalla o paneles de estadísticas según tu necesidad.  
 
-Edita los componentes en frontend/src/.
+---
 
-Ajusta estilos con TailwindCSS o clases personalizadas.
+## ⚠️ Problemas comunes
 
-Problemas comunes
-Problema	Solución
-CORS error en el frontend	Asegúrate que el backend esté corriendo en el puerto 3000 y que ambos estén conectados correctamente.
-Error conectando al Live	Verifica el nombre de usuario de TikTok y que estés transmitiendo en vivo.
-No cargan mensajes en el frontend	Comprueba que Socket.IO esté emitiendo eventos desde el backend.
-npm run dev no inicia	Asegúrate de estar en la carpeta correcta y haber hecho npm install.
-Futuras mejoras
+| Problema | Posible solución |
+|----------|------------------|
+| **CORS error en el frontend** | Asegúrate de que el backend esté en el puerto `3000` y que ambos servicios estén conectados correctamente. |
+| **Error conectando al Live** | Verifica el nombre de usuario de TikTok y que la transmisión en vivo esté activa. |
+| **No cargan mensajes en el frontend** | Comprueba que **Socket.IO** esté emitiendo eventos desde el backend. |
+| **`npm run dev` no inicia** | Verifica que estés en la carpeta correcta y hayas ejecutado `npm install`. |
 
-📊 Panel de estadísticas en tiempo real.
+---
 
-🔔 Sistema de alertas para donaciones y seguidores.
+## 🚀 Futuras mejoras
 
-💾 Guardar eventos en base de datos.
+- 📊 Panel de **estadísticas en tiempo real**.  
+- 🔔 Sistema de **alertas visuales y sonoras** para donaciones y seguidores.  
+- 💾 **Persistencia en base de datos** para guardar los eventos.  
+- 🌍 **Despliegue en producción** con Vercel, Render o similares.  
 
-🌍 Despliegue en producción (Vercel/Render).
+---
 
-Licencia
+## 📜 Licencia
 
-Este proyecto se distribuye bajo la licencia MIT.
+Este proyecto se distribuye bajo la licencia **MIT**.  
 Puedes usarlo y modificarlo libremente para tus proyectos personales o comerciales.
 
-Créditos
+---
 
-Autor: Axel Cano y Wiliam Gazabon
+## 👥 Créditos
 
-Librerías clave: tiktok-live-connector
-, Socket.IO
-, React
-.
+- **Autores:** Axel Cano y Wiliam Gazabon  
+- **Librerías clave:**  
+  - [tiktok-live-connector](https://github.com/zerodytrash/TikTok-Live-Connector)  
+  - [Socket.IO](https://socket.io/)  
+  - [React](https://reactjs.org/)  
