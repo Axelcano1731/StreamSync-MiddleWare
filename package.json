@@ -1,0 +1,23 @@
+{
+  "name": "tiktok-live-node",
+  "version": "1.0.0",
+  "description": "Proyecto para conectarse a TikTok Live y manejar eventos como chat, likes, follows y gifts.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node index.js",
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "tiktok",
+    "tiktok-live",
+    "streaming",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "tiktok-live-connector": "^2.0.7-beta1"
+  }
+}
