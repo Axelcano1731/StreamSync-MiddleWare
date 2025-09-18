@@ -1,0 +1,16 @@
+directories:
+  output: ../dist
+  buildResources: build
+appId: com.streamsync.desktop
+productName: StreamSync
+files:
+  - filter:
+      - main.js
+      - package.json
+      - ../backend/**
+      - ../frontend/dist/**
+win:
+  target:
+    - nsis
+  icon: icon.ico
+electronVersion: 30.5.1

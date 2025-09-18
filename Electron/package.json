@@ -1,0 +1,48 @@
+{
+  "name": "streamsync-electron",
+  "version": "1.0.0",
+  "description": "Aplicación de escritorio StreamSync usando Electron",
+  "author": "Axel Cano",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.streamsync.desktop",
+    "productName": "StreamSync",
+    "directories": {
+      "output": "../dist"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "../backend/**",
+      "../frontend/dist/**"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "TU_USUARIO_GITHUB",
+        "repo": "StreamSync-MiddleWare"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "cross-env": "^10.0.0",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
