@@ -1,0 +1,79 @@
+########################################
+# Node.js
+########################################
+node_modules/
+npm-debug.log
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+########################################
+# Electron Builds
+########################################
+# Carpetas de build generadas por Electron
+electron/dist/
+electron/out/
+electron/build/
+
+# Ejecutables y binarios generados
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.msi
+
+########################################
+# Frontend (React / Next.js / Vite, etc.)
+########################################
+frontend/dist/
+frontend/.vite/
+frontend/.next/
+frontend/build/
+
+# Archivos temporales de desarrollo
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+########################################
+# Backend
+########################################
+backend/logs/
+backend/*.log
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.mypy_cache/
+
+# Archivos de configuración y entorno
+backend/.env
+backend/.env.local
+
+########################################
+# Global Config / OS Files
+########################################
+.env
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*.bak
+*.tmp
+
+########################################
+# Archivos de build de empaquetado
+########################################
+# Evitar subir builds de instaladores o artefactos generados
+release/
+uploads/
+temp/
+
+########################################
+# Otros archivos innecesarios
+########################################
+# Logs globales
+logs/
+*.log
