@@ -5,6 +5,7 @@ const socket = io('http://localhost:3000'); // Conectar con el backend
 
 function App() {
   const [events, setEvents] = useState([]);
+<<<<<<< HEAD
   const [username, setUsername] = useState('');
   const [status, setStatus] = useState('offline'); // 'online', 'offline', 'error'
 
@@ -15,16 +16,35 @@ function App() {
     });
 
     // Recibir chats
+=======
+
+  useEffect(() => {
+    // Likes
+    socket.on('like', data => {
+      setEvents(prev => [...prev, `❤️ ${data.uniqueId}`]);
+    });
+
+    // Chats
+>>>>>>> origin/main
     socket.on('chat', data => {
       setEvents(prev => [...prev, `💬 ${data.uniqueId}: ${data.comment}`]);
     });
 
+<<<<<<< HEAD
     // Recibir seguidores
     socket.on('follow', data => {
       setEvents(prev => [...prev, `➕ ${data.uniqueId} ahora sigue al streamer`]);
     });
 
     // Recibir gifts
+=======
+    // Seguidores
+    socket.on('follow', data => {
+      setEvents(prev => [...prev, `➕ ${data.uniqueId}`]);
+    });
+
+    // Donaciones
+>>>>>>> origin/main
     socket.on('gift', data => {
       setEvents(prev => [
         ...prev,
@@ -32,6 +52,7 @@ function App() {
       ]);
     });
 
+<<<<<<< HEAD
     // Recibir estado de conexión
     socket.on('status', data => {
       setStatus(data.status);
@@ -40,11 +61,14 @@ function App() {
       }
     });
 
+=======
+>>>>>>> origin/main
     return () => {
       socket.off('like');
       socket.off('chat');
       socket.off('follow');
       socket.off('gift');
+<<<<<<< HEAD
       socket.off('status');
     };
   }, []);
@@ -115,6 +139,23 @@ function App() {
       </div>
 
       {/* Columna derecha (gris) */}
+=======
+    };
+  }, []);
+
+  return (
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', margin: 0 }}>
+      {/* Columna izquierda (negra) */}
+      <div style={{ flex: '0 0 400px', backgroundColor: '#0d0d0d', color: '#fff', padding: '20px' }}>
+        <h1>StreamSync - TikTok Live</h1>
+        <h2>Likes ❤️</h2>
+        <h2>Mensajes 💬</h2>
+        <h2>Seguidores ➕</h2>
+        <h2>Donaciones 🎁</h2>
+      </div>
+
+      {/* Columna derecha (gris, llena el resto del espacio) */}
+>>>>>>> origin/main
       <div style={{ flex: 1, backgroundColor: '#1e1e1e', color: '#fff', padding: '20px', overflowY: 'auto' }}>
         <ul style={{ listStyle: 'none', padding: 0 }}>
           {events.map((event, index) => (
