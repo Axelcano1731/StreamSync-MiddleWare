@@ -1,0 +1,99 @@
+{
+  "alerts": {
+    "gift": {
+      "enabled": true,
+      "sound": "default_gift.mp3",
+      "volume": 0.8,
+      "duration": 5000,
+      "animation": "slideIn",
+      "minDiamonds": 1,
+      "showOverlay": true,
+      "tts": false
+    },
+    "follow": {
+      "enabled": true,
+      "sound": "default_follow.mp3",
+      "volume": 0.6,
+      "duration": 3000,
+      "animation": "fadeIn",
+      "showOverlay": true,
+      "tts": false
+    },
+    "share": {
+      "enabled": true,
+      "sound": "default_share.mp3",
+      "volume": 0.5,
+      "duration": 3000,
+      "animation": "fadeIn",
+      "showOverlay": true,
+      "tts": false
+    },
+    "chat": {
+      "enabled": true,
+      "sound": null,
+      "volume": 0.5,
+      "duration": 0,
+      "animation": "none",
+      "showOverlay": false,
+      "tts": true
+    },
+    "like": {
+      "enabled": true,
+      "sound": null,
+      "volume": 0.3,
+      "duration": 2000,
+      "animation": "pop",
+      "showOverlay": false,
+      "tts": false
+    },
+    "memberJoin": {
+      "enabled": false,
+      "sound": null,
+      "volume": 0.3,
+      "duration": 2000,
+      "animation": "fadeIn",
+      "showOverlay": false,
+      "tts": false
+    }
+  },
+  "tts": {
+    "enabled": true,
+    "voice": null,
+    "rate": 1.8,
+    "pitch": 1,
+    "volume": 0.8,
+    "maxLength": 200,
+    "filterSpam": true,
+    "blockedWords": [],
+    "readUsername": true,
+    "queueMode": "fifo"
+  },
+  "overlay": {
+    "position": "top-right",
+    "maxAlerts": 3,
+    "theme": "dark",
+    "customCSS": ""
+  },
+  "goals": {
+    "likes": {
+      "target": 0,
+      "current": 0,
+      "enabled": false
+    },
+    "followers": {
+      "target": 0,
+      "current": 0,
+      "enabled": false
+    },
+    "gifts": {
+      "target": 0,
+      "current": 0,
+      "enabled": false
+    },
+    "diamonds": {
+      "target": 0,
+      "current": 0,
+      "enabled": false
+    }
+  }
+}

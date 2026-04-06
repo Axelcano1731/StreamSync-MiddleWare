@@ -1,0 +1,272 @@
+/* StreamSync Overlay — Transparent overlay for OBS Browser Source */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+body {
+  background: transparent;
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+/* ═══════ ALERT CONTAINER ═══════ */
+#alert-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 1000;
+  max-width: 400px;
+}
+
+/* ═══════ ALERT CARD ═══════ */
+.alert-card {
+  background: linear-gradient(135deg, rgba(30, 30, 45, 0.92), rgba(50, 50, 75, 0.88));
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.alert-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  border-radius: 16px 0 0 16px;
+}
+
+/* Alert type colors */
+.alert-card.gift::before { background: linear-gradient(180deg, #ff6b6b, #ff0050); }
+.alert-card.follow::before { background: linear-gradient(180deg, #69db7c, #37b24d); }
+.alert-card.share::before { background: linear-gradient(180deg, #74c0fc, #339af0); }
+.alert-card.like::before { background: linear-gradient(180deg, #ff8787, #e03131); }
+.alert-card.memberJoin::before { background: linear-gradient(180deg, #b197fc, #7950f2); }
+
+.alert-icon {
+  font-size: 2em;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+
+.alert-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-username {
+  font-weight: 700;
+  font-size: 0.95em;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.alert-message {
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alert-badge {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.75em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
+
+.alert-card.gift .alert-badge {
+  background: linear-gradient(135deg, rgba(255, 0, 80, 0.3), rgba(255, 107, 107, 0.3));
+  color: #ff6b6b;
+}
+
+/* Gift image */
+.alert-gift-img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+}
+
+/* ═══════ ANIMATIONS ═══════ */
+@keyframes slideIn {
+  0% { transform: translateX(120%); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOut {
+  0% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fadeOut {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.9); }
+}
+
+@keyframes bounceIn {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.05); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.alert-enter-slideIn { animation: slideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.alert-exit-slideIn { animation: slideOut 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.alert-enter-fadeIn { animation: fadeIn 0.4s ease-out forwards; }
+.alert-exit-fadeIn { animation: fadeOut 0.4s ease-out forwards; }
+.alert-enter-bounce { animation: bounceIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.alert-exit-bounce { animation: fadeOut 0.4s ease-out forwards; }
+.alert-enter-pop { animation: pop 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.alert-exit-pop { animation: fadeOut 0.3s ease-out forwards; }
+
+/* Gift shimmer effect */
+.alert-card.gift {
+  background: linear-gradient(135deg, rgba(40, 20, 40, 0.95), rgba(80, 30, 60, 0.9));
+}
+
+.alert-card.gift .alert-username {
+  background: linear-gradient(90deg, #ff6b6b, #ffd43b, #ff6b6b);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ═══════ GOAL TRACKER ═══════ */
+.goal-tracker {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, rgba(30, 30, 45, 0.92), rgba(50, 50, 75, 0.88));
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 14px 24px;
+  min-width: 320px;
+  color: #fff;
+  z-index: 999;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.goal-tracker.hidden {
+  display: none;
+}
+
+.goal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.goal-icon {
+  font-size: 1.2em;
+}
+
+.goal-title {
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.goal-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.goal-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7950f2, #ff0050);
+  border-radius: 4px;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  width: 0%;
+}
+
+.goal-text {
+  text-align: center;
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 6px;
+}
+
+/* ═══════ CHAT BOX ═══════ */
+.chat-box {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 350px;
+  max-height: 300px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+  z-index: 998;
+}
+
+.chat-box.hidden {
+  display: none;
+}
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-msg {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: #fff;
+  font-size: 0.85em;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.chat-msg .chat-user {
+  font-weight: 600;
+  color: #69db7c;
+  margin-right: 6px;
+}

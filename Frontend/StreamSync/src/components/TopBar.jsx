@@ -1,30 +1,37 @@
 // components/TopBar.jsx
 import React from "react";
 
-export default function TopBar({ status, username, disconnectFromTikTok }) {
+export default function TopBar({ status, username, disconnectFromTikTok, pageTitle }) {
+  const statusLabels = {
+    online: "EN VIVO",
+    offline: "Desconectado",
+    reconnecting: "Reconectando...",
+    ended: "Stream finalizado",
+    error: "Error",
+  };
+
   return (
     <div className="top-bar">
-      <div className="logo-section">
-        <img
-          src="https://www.svgrepo.com/show/303115/tiktok-logo-tiktok.svg"
-          alt="TikTok Logo"
-          className="tiktok-icon"
-        />
-        <span className="app-name">
-          {status === "online" ? "Monitor en Vivo" : "TikTok Live Monitor"}
-        </span>
+      <div className="topbar-left">
+        <span className="topbar-title">{pageTitle || "Dashboard"}</span>
       </div>
-      <div className="status-section">
-        {status === "online" ? (
-          <>
-            <span className="live-status-indicator"></span>
-            <span className="live-text">EN VIVO {username}</span>
-            <button className="disconnect-button" onClick={disconnectFromTikTok}>
-              Desconectar
-            </button>
-          </>
-        ) : (
-          <span className="offline-text">No está en vivo</span>
+
+      <div className="topbar-right">
+        {status === "online" && username && (
+          <span style={{ fontSize: "0.85em", color: "var(--text-secondary)" }}>
+            @{username}
+          </span>
+        )}
+
+        <div className={`status-badge ${status}`}>
+          <span className="status-dot"></span>
+          {statusLabels[status] || status}
+        </div>
+
+        {status === "online" && (
+          <button className="btn btn-danger" onClick={disconnectFromTikTok}>
+            Desconectar
+          </button>
         )}
       </div>
     </div>

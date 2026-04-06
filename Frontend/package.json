@@ -8,6 +8,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "framer-motion": "^12.23.22",
+    "lucide-react": "^0.545.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "socket.io-client": "^4.8.1"

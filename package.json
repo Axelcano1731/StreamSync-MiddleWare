@@ -1,0 +1,13 @@
+{
+  "name": "streamsync",
+  "version": "1.0.0",
+  "description": "StreamSync - Competitive Streaming Middleware",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix Backend\" \"npm run dev --prefix Frontend/StreamSync\"",
+    "install:all": "npm install && npm install --prefix Backend && npm install --prefix Frontend/StreamSync",
+    "build:frontend": "npm run build --prefix Frontend/StreamSync"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
