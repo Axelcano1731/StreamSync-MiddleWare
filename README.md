@@ -24,96 +24,99 @@ React.js	Frontend dinámico
 Socket.IO	Comunicación en tiempo real
 TikTok Live Connector	Conexión con la API de TikTok
 TailwindCSS	Estilos y diseño moderno
-Requisitos previos
-
-Antes de comenzar, asegúrate de tener instalado:
-
 ## Requisitos previos
 
 - **Node.js** (v18 o superior)  
 - **npm** o **Yarn**  
 - Una cuenta de TikTok con transmisión en vivo activa (nombre de usuario sin `@`)
 
-## Instalación
+---
 
-Sigue estos pasos para clonar y ejecutar el proyecto localmente:
+## 🛠️ Instalación paso a paso
 
-1. Clonar el repositorio
+El proyecto se compone de tres módulos principales: **Backend**, **Frontend**, y **Electron** (opcional, para versión de escritorio).
+
+### 1. Clonar el repositorio
 ```bash
-git clone https://github.com/tu-usuario/streamsync-tiktok.git
-cd streamsync-tiktok
+git clone https://github.com/Axelcano1731/StreamSync-MiddleWare.git
+cd StreamSync-MiddleWare
 ```
 
-2️⃣ Instalar dependencias
-Backend
+### 2. Instalar dependencias
+
+**Para el Backend:**
 ```bash
-cd backend
+cd Backend
 npm install
 ```
 
-Frontend
+**Para el Frontend:**
 ```bash
-cd ../frontend
+cd ../Frontend
 npm install
 ```
 
-3️⃣ Configuración del backend
-
-Edita el archivo server.js en la carpeta backend y coloca tu nombre de usuario de TikTok:
-
-```bash 
-const tiktokUsername = 'TU_USUARIO_TIKTOK';
+**Para Electron (Opcional - App de Escritorio):**
+```bash
+cd ../Electron
+npm install
 ```
 
+---
 
-⚠️ Importante: No coloques el símbolo @, solo el nombre de usuario.
+## 🚀 Tutorial de Ejecución
 
-4️⃣ Iniciar los servidores
-Backend
-```bash 
-cd backend
+Una vez instalado, aquí te explicamos cómo lanzar todos los módulos del sistema y el juego a la vez.
+
+### Paso 1: Iniciar el servidor Backend
+El backend es el núcleo de StreamSync. Maneja la conexión con TikTok, los websockets y sirve **los overlays y el juego de Wordle**.
+
+Abre una terminal en la raíz del proyecto y ejecuta:
+```bash
+cd Backend
+npm run dev
+```
+Verás en la consola que el servidor arranca en `http://localhost:3000`. 
+*(¡Déjalo corriendo!)*
+
+### Paso 2: Iniciar el Panel de Control (Frontend)
+El Frontend te permite configurar la conexión, ver las estadísticas en tiempo real y el chat.
+
+Abre **otra ventana de terminal** en la raíz del proyecto y ejecuta:
+```bash
+cd Frontend
+npm run dev
+```
+El panel estará disponible en **`http://localhost:5173`**. Ábrelo en tu navegador y configura ahí tu usuario de TikTok.
+
+### Paso 3: Jugar Wordle Interactivo
+El Wordle interactivo para el chat se comunica a través del sistema, y el Backend **lo sirve automáticamente**. No necesitas iniciar otro servidor para el juego.
+
+1. Asegúrate de tener el **Backend corriendo** (Paso 1).
+2. Asegúrate de estar conectado a tu live en el panel Frontend (Paso 2).
+3. Abre en tu navegador (o agrégalo como Fuente de Navegador en **OBS Studio**):
+   **👉 `http://localhost:3000/games/wordle/`**
+
+¡Listo! El juego cargará y comenzará a capturar las palabras de 5 letras que los usuarios escriban en el chat de tu directo en TikTok.
+
+### Opcional: Versión de Escritorio (Electron)
+Si prefieres no usar el navegador para el panel de control, puedes abrirlo como una app de escritorio nativa usando Electron:
+```bash
+cd Electron
 npm run dev
 ```
 
+---
 
-El backend se ejecutará en:
+Estructura del proyecto:
 ```bash 
-http://localhost:3000
-```
-
-Frontend
-
-En otra terminal:
-```bash 
-cd frontend
-npm start
-```
-
-
-El frontend se ejecutará en:
-```bash 
-http://localhost:5173
-```
-
-El puerto puede variar dependiendo de la configuración de Vite.
-
-Estructura del proyecto
-```bash 
-streamsync-tiktok/
+StreamSync-MiddleWare/
 │
-├── backend/                # Servidor Node.js
-│   ├── server.js           # Código principal del servidor
-│   ├── package.json
-│   └── ...
-│
-├── frontend/               # Aplicación React
-│   ├── src/
-│   │   ├── App.jsx
-│   │   └── ...
-│   ├── public/
-│   ├── package.json
-│   └── ...
-│
+├── Backend/                # Servidor Node.js (Websockets, Overlays, Host de juegos)
+├── Frontend/               # Panel de control en React/Vite
+├── Electron/               # Empaquetado de escritorio
+├── games/                  # Juegos para streamers
+│   └── wordle/             # Wordle interactivo
 └── README.md
 ```
 ## 🔄 Flujo de datos

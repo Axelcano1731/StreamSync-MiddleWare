@@ -1,22 +1,52 @@
-// socket/socketHandler.js
 import { connectToTikTok, cancelReconnect } from '../controllers/tiktokController.js';
 import { disconnectConnection } from '../services/tiktokService.js';
 import { getConfig, updateConfig, loadConfig } from '../config/alertConfig.js';
 import { getAllStats, getTopDonors, getTopChatters, getSessionSummary } from '../services/statsTracker.js';
-import { initEngine, startSpotifyBroadcast } from '../services/eventEngine.js';
+import { initEngine, startSpotifyBroadcast, emitPreviewAlert, resetGoalProgress } from '../services/eventEngine.js';
 import { getSpotifyStatus, getCurrentTrack } from '../services/spotifyService.js';
+import { getWebhookHistory, getWebhookEmitter, sendTestWebhook } from '../services/webhookService.js';
+import {
+  getMinecraftStatus,
+  startMinecraftServer,
+  stopMinecraftServer,
+  sendMinecraftCommand,
+  getMinecraftEmitter,
+} from '../services/minecraftServerService.js';
+
+function emitConfig(io, config) {
+  io.emit('alertConfig', config);
+  io.of('/overlay').emit('config', config);
+}
+
+function resolveCallback(arg1, arg2) {
+  if (typeof arg1 === 'function') {
+    return { payload: undefined, callback: arg1 };
+  }
+
+  return {
+    payload: arg1,
+    callback: typeof arg2 === 'function' ? arg2 : null,
+  };
+}
 
 export default function socketHandler(io) {
-  // Initialize event engine with io reference
   initEngine(io);
-
-  // Load config on startup
   loadConfig();
-
-  // Start Spotify now-playing broadcast loop
   startSpotifyBroadcast();
 
-  // Periodic ranking broadcast to overlay widgets (every 5s)
+  const webhookEmitter = getWebhookEmitter();
+  webhookEmitter.on('delivery', (entry) => {
+    io.emit('webhookDelivery', entry);
+  });
+
+  const minecraftEmitter = getMinecraftEmitter();
+  minecraftEmitter.on('status', (status) => {
+    io.emit('minecraftStatus', status);
+  });
+  minecraftEmitter.on('log', (entry) => {
+    io.emit('minecraftLog', entry);
+  });
+
   setInterval(() => {
     const donors = getTopDonors(5);
     const chatters = getTopChatters(5);
@@ -25,22 +55,19 @@ export default function socketHandler(io) {
     io.emit('topChattersUpdate', chatters);
   }, 5000);
 
-  // ====== OVERLAY NAMESPACE ======
   io.of('/overlay').on('connection', (socket) => {
-    console.log('🎨 Overlay client connected:', socket.id);
-    // Send current config to overlay
+    console.log('Overlay client connected:', socket.id);
     socket.emit('config', getConfig());
 
     socket.on('disconnect', () => {
-      console.log('🎨 Overlay client disconnected:', socket.id);
+      console.log('Overlay client disconnected:', socket.id);
     });
   });
 
-  // ====== MAIN NAMESPACE (Dashboard) ======
   io.on('connection', (socket) => {
-    console.log('📱 Dashboard client connected:', socket.id);
+    console.log('Dashboard client connected:', socket.id);
+    socket.emit('minecraftStatus', getMinecraftStatus());
 
-    // ── TikTok Connection ──
     socket.on('connectToTikTok', async (username) => {
       await connectToTikTok(username, io);
     });
@@ -48,10 +75,10 @@ export default function socketHandler(io) {
     socket.on('disconnectFromTikTok', () => {
       cancelReconnect();
       disconnectConnection();
+      resetGoalProgress();
       io.emit('status', { status: 'offline' });
     });
 
-    // ── Alert Configuration ──
     socket.on('getAlertConfig', (callback) => {
       const config = getConfig();
       if (typeof callback === 'function') callback(config);
@@ -61,14 +88,12 @@ export default function socketHandler(io) {
     socket.on('updateAlertConfig', (data) => {
       const { section, config } = data;
       const updated = updateConfig(section, config);
-      io.emit('alertConfig', updated);
-      io.of('/overlay').emit('config', updated);
+      emitConfig(io, updated);
     });
 
     socket.on('updateAlerts', (alertsConfig) => {
       const updated = updateConfig('alerts', alertsConfig);
-      io.emit('alertConfig', updated);
-      io.of('/overlay').emit('config', updated);
+      emitConfig(io, updated);
     });
 
     socket.on('updateTTS', (ttsConfig) => {
@@ -78,11 +103,56 @@ export default function socketHandler(io) {
 
     socket.on('updateGoals', (goalsConfig) => {
       const updated = updateConfig('goals', goalsConfig);
-      io.emit('alertConfig', updated);
-      io.of('/overlay').emit('config', updated);
+      emitConfig(io, updated);
     });
 
-    // ── Stats ──
+    socket.on('updateOverlayConfig', (overlayConfig) => {
+      const updated = updateConfig('overlay', overlayConfig);
+      emitConfig(io, updated);
+    });
+
+    socket.on('previewAlert', (eventType, callback) => {
+      try {
+        const preview = emitPreviewAlert(eventType);
+        if (typeof callback === 'function') {
+          callback({ ok: true, preview });
+        }
+      } catch (error) {
+        if (typeof callback === 'function') {
+          callback({ ok: false, error: error.message });
+        }
+      }
+    });
+
+    socket.on('updateWebhooks', (webhooksConfig) => {
+      const updated = updateConfig('webhooks', webhooksConfig);
+      io.emit('alertConfig', updated);
+      socket.emit('webhookHistory', getWebhookHistory());
+    });
+
+    socket.on('getWebhookHistory', (callback) => {
+      const history = getWebhookHistory();
+      if (typeof callback === 'function') callback(history);
+      else socket.emit('webhookHistory', history);
+    });
+
+    socket.on('testWebhook', async (webhookId, callback) => {
+      try {
+        const result = await sendTestWebhook(webhookId);
+        if (typeof callback === 'function') {
+          callback({ ok: true, result });
+        } else {
+          socket.emit('webhookTestResult', { ok: true, result });
+        }
+      } catch (error) {
+        if (typeof callback === 'function') {
+          callback({ ok: false, error: error.message });
+        } else {
+          socket.emit('webhookTestResult', { ok: false, error: error.message });
+        }
+      }
+    });
+
     socket.on('getStats', (callback) => {
       const stats = getAllStats();
       if (typeof callback === 'function') callback(stats);
@@ -107,7 +177,6 @@ export default function socketHandler(io) {
       else socket.emit('sessionSummary', summary);
     });
 
-    // ── Spotify ──
     socket.on('getSpotifyStatus', (callback) => {
       const status = getSpotifyStatus();
       if (typeof callback === 'function') callback(status);
@@ -120,8 +189,59 @@ export default function socketHandler(io) {
       else socket.emit('nowPlaying', track || { isPlaying: false });
     });
 
+    socket.on('getMinecraftStatus', (callback) => {
+      const status = getMinecraftStatus();
+      if (typeof callback === 'function') callback(status);
+      else socket.emit('minecraftStatus', status);
+    });
+
+    socket.on('updateMinecraftConfig', (arg1, arg2) => {
+      const { payload, callback } = resolveCallback(arg1, arg2);
+      const updated = updateConfig('minecraft', payload || {});
+      const status = getMinecraftStatus();
+      io.emit('alertConfig', updated);
+      io.emit('minecraftStatus', status);
+
+      if (callback) {
+        callback({ ok: true, config: updated.minecraft, status });
+      }
+    });
+
+    socket.on('startMinecraftServer', async (arg1, arg2) => {
+      const { payload, callback } = resolveCallback(arg1, arg2);
+
+      try {
+        if (payload && typeof payload === 'object' && Object.keys(payload).length > 0) {
+          updateConfig('minecraft', payload);
+        }
+
+        const status = await startMinecraftServer(payload || {});
+        if (callback) callback({ ok: true, status });
+      } catch (error) {
+        if (callback) callback({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on('stopMinecraftServer', async (callback) => {
+      try {
+        const status = await stopMinecraftServer();
+        if (typeof callback === 'function') callback({ ok: true, status });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on('sendMinecraftCommand', async (command, callback) => {
+      try {
+        const status = await sendMinecraftCommand(command);
+        if (typeof callback === 'function') callback({ ok: true, status });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
+      }
+    });
+
     socket.on('disconnect', () => {
-      console.log('📱 Dashboard client disconnected:', socket.id);
+      console.log('Dashboard client disconnected:', socket.id);
     });
   });
 }

@@ -12,6 +12,7 @@ import AlertsPanel from "./components/AlertsPanel";
 import EventLog from "./components/EventLog";
 import OverlayPanel from "./components/OverlayPanel";
 import SpotifyPanel from "./components/SpotifyPanel";
+import AutomationPanel from "./components/AutomationPanel";
 import { VoiceSettings } from "./components/VoiceSettings";
 
 const PAGE_TITLES = {
@@ -20,6 +21,7 @@ const PAGE_TITLES = {
   alerts: "Alertas",
   events: "Log de Eventos",
   overlay: "Overlays",
+  automation: "Automatización",
   spotify: "Spotify",
   settings: "Configuración",
 };
@@ -46,25 +48,25 @@ function App() {
     toggleEnabled: toggleTTS,
   } = useSpeech();
 
-  const renderPage = () => {
-    // If offline, always show connect panel
-    if (status !== "online" && status !== "reconnecting") {
-      return (
-        <div
-          className="main-content"
-          style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
-          <ConnectPanel
-            username={username}
-            setUsername={setUsername}
-            connectToTikTok={connectToTikTok}
-          />
-        </div>
-      );
-    }
+  const isLiveConnected = status === "online" || status === "reconnecting";
 
+  const renderConnectGate = () => (
+    <div
+      className="main-content"
+      style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+    >
+      <ConnectPanel
+        username={username}
+        setUsername={setUsername}
+        connectToTikTok={connectToTikTok}
+      />
+    </div>
+  );
+
+  const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
+        if (!isLiveConnected) return renderConnectGate();
         return (
           <div className="main-content page-enter">
             <StatsPanel liveStats={liveStats} />
@@ -73,6 +75,7 @@ function App() {
         );
 
       case "chat":
+        if (!isLiveConnected) return renderConnectGate();
         return (
           <div className="main-content">
             <InteractionsPanel events={events} topDonors={topDonors} />
@@ -87,6 +90,7 @@ function App() {
         );
 
       case "events":
+        if (!isLiveConnected) return renderConnectGate();
         return (
           <div className="main-content">
             <EventLog events={events} />
@@ -97,6 +101,13 @@ function App() {
         return (
           <div className="main-content">
             <OverlayPanel />
+          </div>
+        );
+
+      case "automation":
+        return (
+          <div className="main-content">
+            <AutomationPanel />
           </div>
         );
 

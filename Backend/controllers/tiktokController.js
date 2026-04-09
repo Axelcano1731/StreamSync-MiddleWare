@@ -8,7 +8,7 @@ import {
   disconnectConnection,
   getGiftMap
 } from "../services/tiktokService.js";
-import { processEvent } from "../services/eventEngine.js";
+import { processEvent, resetGoalProgress } from "../services/eventEngine.js";
 import { trackEvent, startSession, endSession } from "../services/statsTracker.js";
 
 // Reconnection settings
@@ -82,12 +82,14 @@ export async function connectToTikTok(username, io, isReconnect = false) {
       reconnectAttempts = 0; // Reset on successful connect
       await refreshAvailableGifts();
       startSession(username);
+      resetGoalProgress();
       io.emit("status", { status: "online", username, roomId: state.roomId });
     });
 
     connection.on(ControlEvent.DISCONNECTED, () => {
       console.warn("🔌 Desconectado de TikTok Live");
       endSession();
+      resetGoalProgress();
       io.emit("status", { status: "offline", username });
       attemptReconnect();
     });
@@ -95,6 +97,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
     connection.on(ControlEvent.STREAM_END, ({ action }) => {
       console.log("📴 El stream ha finalizado:", action);
       endSession();
+      resetGoalProgress();
       io.emit("status", { status: "ended", username, action });
     });
 
@@ -104,7 +107,14 @@ export async function connectToTikTok(username, io, isReconnect = false) {
       const comment = (data.comment ?? "").replace(/\s+/g, " ").trim();
       const profilePic = data.user?.profilePictureUrl ?? null;
 
-      const eventData = { uniqueId: user, comment, profilePic };
+      const eventData = {
+        uniqueId: user,
+        comment,
+        profilePic,
+        isModerator: data.user?.isModerator || false,
+        isSubscriber: data.user?.isSubscriber || false,
+        badges: data.user?.badges || [],
+      };
 
       console.log(`💬 [CHAT] ${user}: ${comment}`);
       io.emit("chat", eventData);

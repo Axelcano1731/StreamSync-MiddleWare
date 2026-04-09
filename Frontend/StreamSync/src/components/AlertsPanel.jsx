@@ -1,5 +1,4 @@
-// components/AlertsPanel.jsx
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import socket from "../services/socketService";
 
 const ALERT_TYPES = [
@@ -15,19 +14,21 @@ const ANIMATIONS = ["slideIn", "fadeIn", "bounce", "pop", "none"];
 
 export default function AlertsPanel() {
   const [config, setConfig] = useState(null);
+  const [previewMessage, setPreviewMessage] = useState("");
 
   useEffect(() => {
-    // Request current config
     socket.emit("getAlertConfig", (cfg) => {
       if (cfg) setConfig(cfg);
     });
 
-    socket.on("alertConfig", (cfg) => {
+    const handleConfig = (cfg) => {
       setConfig(cfg);
-    });
+    };
+
+    socket.on("alertConfig", handleConfig);
 
     return () => {
-      socket.off("alertConfig");
+      socket.off("alertConfig", handleConfig);
     };
   }, []);
 
@@ -45,6 +46,16 @@ export default function AlertsPanel() {
     socket.emit("updateAlerts", updated);
   };
 
+  const triggerPreview = (alertKey) => {
+    socket.emit("previewAlert", alertKey, (response) => {
+      setPreviewMessage(
+        response?.ok
+          ? `Vista previa enviada para ${alertKey}.`
+          : `No se pudo generar la prueba: ${response?.error || "Error desconocido"}`
+      );
+    });
+  };
+
   if (!config) {
     return (
       <div className="page-enter">
@@ -59,15 +70,28 @@ export default function AlertsPanel() {
   }
 
   return (
-    <div className="page-enter">
-      <div className="panel" style={{ marginBottom: 20 }}>
+    <div className="page-enter" style={{ display: "grid", gap: 20 }}>
+      <div className="panel" style={{ marginBottom: 0 }}>
         <div className="panel-header">
           <div>
-            <div className="panel-title">🔔 Configuración de Alertas</div>
+            <div className="panel-title">Configuración de Alertas</div>
             <div className="panel-subtitle">
-              Personaliza cómo se muestran las alertas en tu stream
+              Diseña textos, sonidos y comportamiento de cada evento.
             </div>
           </div>
+        </div>
+
+        <div className="alert-config-card" style={{ marginBottom: 0 }}>
+          <div style={{ fontSize: "0.82em", color: "var(--text-secondary)", lineHeight: 1.7 }}>
+            Placeholders disponibles: <code>{"{user}"}</code>, <code>{"{comment}"}</code>,{" "}
+            <code>{"{giftName}"}</code>, <code>{"{repeatCount}"}</code>,{" "}
+            <code>{"{diamondCount}"}</code>, <code>{"{likeCount}"}</code>.
+          </div>
+          {previewMessage ? (
+            <div style={{ marginTop: 10, fontSize: "0.82em", color: "var(--text-secondary)" }}>
+              {previewMessage}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -86,9 +110,7 @@ export default function AlertsPanel() {
                   <input
                     type="checkbox"
                     checked={alertCfg.enabled ?? false}
-                    onChange={(e) =>
-                      updateAlert(key, "enabled", e.target.checked)
-                    }
+                    onChange={(e) => updateAlert(key, "enabled", e.target.checked)}
                   />
                   <span className="toggle-slider"></span>
                 </label>
@@ -101,9 +123,7 @@ export default function AlertsPanel() {
                     <input
                       type="checkbox"
                       checked={alertCfg.showOverlay ?? false}
-                      onChange={(e) =>
-                        updateAlert(key, "showOverlay", e.target.checked)
-                      }
+                      onChange={(e) => updateAlert(key, "showOverlay", e.target.checked)}
                     />
                     <span className="toggle-slider"></span>
                   </label>
@@ -115,26 +135,68 @@ export default function AlertsPanel() {
                     <input
                       type="checkbox"
                       checked={alertCfg.tts ?? false}
-                      onChange={(e) =>
-                        updateAlert(key, "tts", e.target.checked)
-                      }
+                      onChange={(e) => updateAlert(key, "tts", e.target.checked)}
                     />
                     <span className="toggle-slider"></span>
                   </label>
                 </div>
+
+                <div>
+                  <span className="config-label">Título</span>
+                  <input
+                    className="input-field"
+                    value={alertCfg.titleTemplate || ""}
+                    onChange={(e) => updateAlert(key, "titleTemplate", e.target.value)}
+                    placeholder="Nuevo regalo"
+                  />
+                </div>
+
+                <div>
+                  <span className="config-label">Mensaje</span>
+                  <textarea
+                    className="input-field"
+                    style={{ minHeight: 72, resize: "vertical" }}
+                    value={alertCfg.messageTemplate || ""}
+                    onChange={(e) => updateAlert(key, "messageTemplate", e.target.value)}
+                    placeholder="{user} envio {repeatCount}x {giftName}"
+                  />
+                </div>
+
+                <div>
+                  <span className="config-label">Archivo de sonido</span>
+                  <input
+                    className="input-field"
+                    value={alertCfg.sound || ""}
+                    onChange={(e) => updateAlert(key, "sound", e.target.value || null)}
+                    placeholder="default_gift.mp3"
+                  />
+                </div>
+
+                {key === "gift" ? (
+                  <div>
+                    <span className="config-label">Diamantes mínimos</span>
+                    <input
+                      className="input-field"
+                      type="number"
+                      min="0"
+                      value={alertCfg.minDiamonds || 0}
+                      onChange={(e) =>
+                        updateAlert(key, "minDiamonds", Number(e.target.value) || 0)
+                      }
+                    />
+                  </div>
+                ) : null}
 
                 <div className="config-row">
                   <span className="config-label">Animación</span>
                   <select
                     className="select-field"
                     value={alertCfg.animation || "slideIn"}
-                    onChange={(e) =>
-                      updateAlert(key, "animation", e.target.value)
-                    }
+                    onChange={(e) => updateAlert(key, "animation", e.target.value)}
                   >
-                    {ANIMATIONS.map((a) => (
-                      <option key={a} value={a}>
-                        {a}
+                    {ANIMATIONS.map((animation) => (
+                      <option key={animation} value={animation}>
+                        {animation}
                       </option>
                     ))}
                   </select>
@@ -151,9 +213,7 @@ export default function AlertsPanel() {
                   max="1"
                   step="0.05"
                   value={alertCfg.volume || 0.5}
-                  onChange={(e) =>
-                    updateAlert(key, "volume", parseFloat(e.target.value))
-                  }
+                  onChange={(e) => updateAlert(key, "volume", parseFloat(e.target.value))}
                 />
 
                 <div className="config-row">
@@ -167,23 +227,24 @@ export default function AlertsPanel() {
                   max="15000"
                   step="500"
                   value={alertCfg.duration || 5000}
-                  onChange={(e) =>
-                    updateAlert(key, "duration", parseInt(e.target.value))
-                  }
+                  onChange={(e) => updateAlert(key, "duration", parseInt(e.target.value, 10))}
                 />
+
+                <button className="btn" onClick={() => triggerPreview(key)}>
+                  Probar Alerta
+                </button>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* TTS Global Config */}
-      <div className="panel" style={{ marginTop: 20 }}>
+      <div className="panel" style={{ marginTop: 0 }}>
         <div className="panel-header">
           <div>
-            <div className="panel-title">🔊 Configuración TTS Global</div>
+            <div className="panel-title">Configuración TTS Global</div>
             <div className="panel-subtitle">
-              Ajustes globales para la lectura de texto
+              Ajustes globales para lectura de comentarios y eventos.
             </div>
           </div>
         </div>

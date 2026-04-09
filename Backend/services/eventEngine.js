@@ -1,68 +1,121 @@
-// services/eventEngine.js
 import { getConfig } from '../config/alertConfig.js';
 import { searchAndPlay, skipTrack, getCurrentTrack, getSpotifyStatus } from './spotifyService.js';
+import { dispatchWebhooks } from './webhookService.js';
 
 /**
  * Event Engine — Processes stream events through configurable rules
- * Trigger → Condition → Action pipeline
- * Now includes chat command processing for Spotify and other integrations
+ * Trigger -> Condition -> Action pipeline
+ * Includes chat command processing, alert rendering, TTS and webhooks.
  */
 
-// Event queue to prevent alert overlap
 let eventQueue = [];
-let isProcessing = false;
 let ioRef = null;
 
-// Anti-spam tracking
-const spamTracker = new Map(); // userId -> { count, lastTime }
-const SPAM_WINDOW = 5000;      // 5 seconds
-const SPAM_THRESHOLD = 10;     // Max events per window
+const spamTracker = new Map();
+const SPAM_WINDOW = 5000;
+const SPAM_THRESHOLD = 10;
 
-// Chat command cooldown
 const commandCooldown = new Map();
-const COMMAND_COOLDOWN = 3000; // 3 seconds between commands per user
+const COMMAND_COOLDOWN = 3000;
 
-/**
- * Initialize the engine with Socket.IO reference
- */
+const PREVIEW_EVENT_DATA = {
+  gift: {
+    uniqueId: 'streamsync_preview',
+    giftName: 'Galaxy',
+    repeatCount: 1,
+    diamondCount: 1000,
+  },
+  follow: {
+    uniqueId: 'nuevo_seguidor',
+  },
+  share: {
+    uniqueId: 'community_boost',
+  },
+  chat: {
+    uniqueId: 'viewer_activo',
+    comment: 'Este es un mensaje de prueba para tu overlay.',
+  },
+  like: {
+    uniqueId: 'like_machine',
+    likeCount: 25,
+    totalLikeCount: 250,
+  },
+  memberJoin: {
+    uniqueId: 'nuevo_viewer',
+  },
+};
+
 export function initEngine(io) {
   ioRef = io;
 }
 
-/**
- * Check if a message contains blocked words
- */
+function emitGoalProgress(goals) {
+  if (!ioRef) {
+    return;
+  }
+
+  ioRef.emit('goalProgress', goals);
+  ioRef.of('/overlay').emit('goalProgress', goals);
+}
+
+function syncGoalProgress(eventType, data) {
+  const config = getConfig();
+  const goals = config.goals || {};
+  let changed = false;
+
+  switch (eventType) {
+    case 'like':
+      if (goals.likes?.enabled) {
+        goals.likes.current += data.likeCount || 1;
+        changed = true;
+      }
+      break;
+    case 'follow':
+      if (goals.followers?.enabled) {
+        goals.followers.current += 1;
+        changed = true;
+      }
+      break;
+    case 'gift':
+      if (goals.gifts?.enabled) {
+        goals.gifts.current += data.repeatCount || 1;
+        changed = true;
+      }
+      if (goals.diamonds?.enabled) {
+        const diamonds = typeof data.diamondCount === 'number' ? data.diamondCount : 0;
+        goals.diamonds.current += diamonds * (data.repeatCount || 1);
+        changed = true;
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (changed) {
+    emitGoalProgress(goals);
+  }
+}
+
 function containsBlockedWords(text, blockedWords = []) {
   if (!text || blockedWords.length === 0) return false;
   const lower = text.toLowerCase();
-  return blockedWords.some(word => lower.includes(word.toLowerCase()));
+  return blockedWords.some((word) => lower.includes(word.toLowerCase()));
 }
 
-/**
- * Check if user is spamming
- */
 function isSpamming(userId) {
   const now = Date.now();
   const tracker = spamTracker.get(userId);
 
-  if (!tracker || (now - tracker.lastTime) > SPAM_WINDOW) {
+  if (!tracker || now - tracker.lastTime > SPAM_WINDOW) {
     spamTracker.set(userId, { count: 1, lastTime: now });
     return false;
   }
 
-  tracker.count++;
+  tracker.count += 1;
   tracker.lastTime = now;
-
-  if (tracker.count > SPAM_THRESHOLD) {
-    return true;
-  }
-
-  return false;
+  return tracker.count > SPAM_THRESHOLD;
 }
 
-/**
- * Check command cooldown
- */
 function isOnCooldown(userId) {
   const last = commandCooldown.get(userId);
   if (!last || Date.now() - last > COMMAND_COOLDOWN) {
@@ -72,9 +125,127 @@ function isOnCooldown(userId) {
   return true;
 }
 
-/**
- * Process chat commands (!play, !song, !skip, !queue, etc.)
- */
+function getDefaultAlertTitle(eventType) {
+  switch (eventType) {
+    case 'gift':
+      return 'Nuevo regalo';
+    case 'follow':
+      return 'Nuevo seguidor';
+    case 'share':
+      return 'Directo compartido';
+    case 'chat':
+      return 'Nuevo comentario';
+    case 'like':
+      return 'Likes en vivo';
+    case 'memberJoin':
+      return 'Nuevo viewer';
+    default:
+      return 'Nueva alerta';
+  }
+}
+
+function getDefaultAlertMessage(eventType, data) {
+  switch (eventType) {
+    case 'gift':
+      return `${data.uniqueId} envio ${data.repeatCount || 1}x ${data.giftName || 'Regalo'}`;
+    case 'follow':
+      return `${data.uniqueId} empezo a seguirte`;
+    case 'share':
+      return `${data.uniqueId} compartio tu live`;
+    case 'chat':
+      return `${data.uniqueId}: ${data.comment || ''}`;
+    case 'like':
+      return `${data.uniqueId} envio ${data.likeCount || 1} likes`;
+    case 'memberJoin':
+      return `${data.uniqueId} se unio al directo`;
+    default:
+      return '';
+  }
+}
+
+function buildTemplateContext(eventType, data) {
+  return {
+    eventType,
+    user: data.uniqueId || data.user?.uniqueId || 'unknown',
+    comment: data.comment || '',
+    likeCount: data.likeCount || 0,
+    totalLikeCount: data.totalLikeCount || 0,
+    repeatCount: data.repeatCount || 1,
+    giftName: data.giftName || 'Regalo',
+    diamondCount: data.diamondCount || 0,
+    viewerCount: data.viewerCount || 0,
+  };
+}
+
+function applyTemplate(template, context, fallback) {
+  const base = template || fallback || '';
+  return base.replace(/\{(\w+)\}/g, (_, key) => {
+    const value = context[key];
+    return value === undefined || value === null ? '' : String(value);
+  });
+}
+
+function emitChatResponse(message) {
+  if (ioRef) {
+    ioRef.emit('chatResponse', { message, timestamp: Date.now() });
+  }
+}
+
+async function broadcastNowPlaying() {
+  if (!ioRef) return;
+  try {
+    const track = await getCurrentTrack();
+    const payload = track || { isPlaying: false };
+    ioRef.emit('nowPlaying', payload);
+    ioRef.of('/overlay').emit('nowPlaying', payload);
+  } catch {
+    // Ignore broadcast failures
+  }
+}
+
+function emitAlert(alertEvent) {
+  if (!ioRef) {
+    return;
+  }
+
+  ioRef.emit('alert', alertEvent);
+  ioRef.of('/overlay').emit('alert', alertEvent);
+}
+
+function createAlertEvent(eventType, data, alertConfig, meta = {}) {
+  const config = getConfig();
+  const templateContext = buildTemplateContext(eventType, data);
+
+  return {
+    id: `${eventType}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    type: eventType,
+    timestamp: Date.now(),
+    user: templateContext.user,
+    title: applyTemplate(
+      alertConfig.titleTemplate,
+      templateContext,
+      getDefaultAlertTitle(eventType)
+    ),
+    message: applyTemplate(
+      alertConfig.messageTemplate,
+      templateContext,
+      getDefaultAlertMessage(eventType, data)
+    ),
+    templateContext,
+    data,
+    meta,
+    config: {
+      sound: alertConfig.sound,
+      volume: alertConfig.volume,
+      duration: alertConfig.duration,
+      animation: alertConfig.animation,
+      showOverlay: alertConfig.showOverlay,
+      tts: alertConfig.tts,
+      presetId: config.overlay?.defaultPresetId || null,
+    },
+  };
+}
+
 async function processChatCommand(data) {
   const comment = (data.comment || '').trim();
   if (!comment.startsWith('!')) return false;
@@ -84,7 +255,6 @@ async function processChatCommand(data) {
   const command = parts[0].toLowerCase();
   const args = parts.slice(1).join(' ');
 
-  // Cooldown check
   if (isOnCooldown(userId)) return true;
 
   switch (command) {
@@ -97,20 +267,20 @@ async function processChatCommand(data) {
 
       const status = getSpotifyStatus();
       if (!status.isConnected) {
-        emitChatResponse(`@${userId} ⚠️ Spotify no está conectado`);
+        emitChatResponse(`@${userId} Spotify no está conectado`);
         return true;
       }
 
       try {
         const track = await searchAndPlay(args);
         if (track) {
-          emitChatResponse(`🎵 @${userId} puso: ${track.name} — ${track.artist}`);
+          emitChatResponse(`@${userId} puso: ${track.name} - ${track.artist}`);
           broadcastNowPlaying();
         } else {
-          emitChatResponse(`@${userId} ❌ No se encontró: ${args}`);
+          emitChatResponse(`@${userId} no encontró: ${args}`);
         }
-      } catch (err) {
-        emitChatResponse(`@${userId} ❌ Error al reproducir`);
+      } catch {
+        emitChatResponse(`@${userId} no pudo reproducir la canción`);
       }
       return true;
     }
@@ -120,15 +290,15 @@ async function processChatCommand(data) {
     case '!np': {
       const status = getSpotifyStatus();
       if (!status.isConnected) {
-        emitChatResponse(`@${userId} ⚠️ Spotify no está conectado`);
+        emitChatResponse(`@${userId} Spotify no está conectado`);
         return true;
       }
 
       const current = await getCurrentTrack();
       if (current && current.isPlaying) {
-        emitChatResponse(`🎵 Ahora suena: ${current.name} — ${current.artist}`);
+        emitChatResponse(`Ahora suena: ${current.name} - ${current.artist}`);
       } else {
-        emitChatResponse(`🎵 No hay música reproduciéndose`);
+        emitChatResponse('No hay música reproduciéndose');
       }
       return true;
     }
@@ -137,132 +307,74 @@ async function processChatCommand(data) {
     case '!saltar': {
       const status = getSpotifyStatus();
       if (!status.isConnected) {
-        emitChatResponse(`@${userId} ⚠️ Spotify no está conectado`);
+        emitChatResponse(`@${userId} Spotify no está conectado`);
         return true;
       }
 
       const next = await skipTrack();
       if (next) {
-        emitChatResponse(`⏭️ @${userId} saltó la canción → ${next.name || 'siguiente'}`);
+        emitChatResponse(`@${userId} saltó la canción -> ${next.name || 'siguiente'}`);
         broadcastNowPlaying();
       }
       return true;
     }
 
     default:
-      return false; // Not a recognized command
+      return false;
   }
 }
 
-/**
- * Emit a response message to chat
- */
-function emitChatResponse(message) {
-  if (ioRef) {
-    ioRef.emit('chatResponse', { message, timestamp: Date.now() });
-  }
-}
-
-/**
- * Broadcast current track to Now Playing overlay widget
- */
-async function broadcastNowPlaying() {
-  if (!ioRef) return;
-  try {
-    const track = await getCurrentTrack();
-    ioRef.emit('nowPlaying', track || { isPlaying: false });
-    ioRef.of('/overlay').emit('nowPlaying', track || { isPlaying: false });
-  } catch (err) {
-    // Ignore
-  }
-}
-
-/**
- * Process an incoming event through the rules engine
- * @param {string} eventType - like, chat, follow, share, gift, memberJoin
- * @param {object} data - Event data from TikTok
- */
 export function processEvent(eventType, data) {
   const config = getConfig();
-  const alertConfig = config.alerts[eventType];
-
-  if (!alertConfig || !alertConfig.enabled) return;
-
+  const alertConfig = config.alerts[eventType] || {};
   const userId = data.uniqueId || data.user?.uniqueId || 'unknown';
 
-  // Process chat commands first (before filtering)
   if (eventType === 'chat') {
     processChatCommand(data).catch(() => {});
   }
 
-  // Anti-spam filter
   if (config.tts.filterSpam && isSpamming(userId)) {
-    console.log(`🚫 Spam filtered: ${userId}`);
+    console.log(`Spam filtered: ${userId}`);
     return;
   }
 
-  // Blocked words filter for chat
   if (eventType === 'chat' && containsBlockedWords(data.comment, config.tts.blockedWords)) {
-    console.log(`🚫 Blocked word detected from ${userId}`);
+    console.log(`Blocked word detected from ${userId}`);
     return;
   }
 
-  // Minimum diamonds filter for gifts
+  dispatchWebhooks(eventType, data, {
+    receivedAt: Date.now(),
+  }).catch((err) => {
+    console.warn(`Error enviando webhooks para ${eventType}:`, err.message);
+  });
+
+  syncGoalProgress(eventType, data);
+
+  if (!alertConfig.enabled) return;
+
   if (eventType === 'gift' && alertConfig.minDiamonds > 0) {
     const diamonds = data.diamondCount || 0;
     if (diamonds < alertConfig.minDiamonds) return;
   }
 
-  // Build the alert event
-  const alertEvent = {
-    id: `${eventType}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    type: eventType,
-    timestamp: Date.now(),
-    user: userId,
-    data: data,
-    config: {
-      sound: alertConfig.sound,
-      volume: alertConfig.volume,
-      duration: alertConfig.duration,
-      animation: alertConfig.animation,
-      showOverlay: alertConfig.showOverlay,
-      tts: alertConfig.tts,
-    },
-  };
-
-  // Add to queue
+  const alertEvent = createAlertEvent(eventType, data, alertConfig);
   eventQueue.push(alertEvent);
+  emitAlert(alertEvent);
 
-  // Emit to dashboard
-  if (ioRef) {
-    ioRef.emit('alert', alertEvent);
-  }
-
-  // Emit to overlay namespace
-  if (ioRef) {
-    ioRef.of('/overlay').emit('alert', alertEvent);
-  }
-
-  // Process TTS if enabled
   if (alertConfig.tts && config.tts.enabled) {
     const ttsEvent = buildTTSEvent(eventType, data, config.tts);
-    if (ttsEvent) {
-      if (ioRef) {
-        ioRef.emit('tts', ttsEvent);
-      }
+    if (ttsEvent && ioRef) {
+      ioRef.emit('tts', ttsEvent);
     }
   }
 }
 
-/**
- * Build a TTS event from stream data
- */
 function buildTTSEvent(eventType, data, ttsConfig) {
   let text = '';
 
   switch (eventType) {
     case 'chat':
-      // Don't TTS commands
       if ((data.comment || '').startsWith('!')) return null;
       text = ttsConfig.readUsername
         ? `${data.uniqueId} dice: ${data.comment}`
@@ -281,9 +393,8 @@ function buildTTSEvent(eventType, data, ttsConfig) {
       return null;
   }
 
-  // Truncate if too long
   if (text.length > ttsConfig.maxLength) {
-    text = text.substring(0, ttsConfig.maxLength) + '...';
+    text = `${text.substring(0, ttsConfig.maxLength)}...`;
   }
 
   return {
@@ -297,23 +408,47 @@ function buildTTSEvent(eventType, data, ttsConfig) {
   };
 }
 
-/**
- * Get pending events in the queue
- */
+export function emitPreviewAlert(eventType) {
+  const config = getConfig();
+  const alertConfig = config.alerts[eventType];
+
+  if (!alertConfig) {
+    throw new Error('Tipo de alerta no soportado');
+  }
+
+  const previewEvent = createAlertEvent(
+    eventType,
+    PREVIEW_EVENT_DATA[eventType] || { uniqueId: 'streamsync_preview' },
+    {
+      ...alertConfig,
+      enabled: true,
+      showOverlay: true,
+    },
+    { preview: true }
+  );
+
+  emitAlert(previewEvent);
+  return previewEvent;
+}
+
 export function getEventQueue() {
   return [...eventQueue];
 }
 
-/**
- * Clear the event queue
- */
 export function clearEventQueue() {
   eventQueue = [];
 }
 
-/**
- * Start periodic Spotify now-playing broadcast
- */
+export function resetGoalProgress() {
+  const config = getConfig();
+
+  for (const goal of Object.values(config.goals || {})) {
+    goal.current = 0;
+  }
+
+  emitGoalProgress(config.goals || {});
+}
+
 export function startSpotifyBroadcast() {
   setInterval(async () => {
     const status = getSpotifyStatus();
@@ -323,16 +458,15 @@ export function startSpotifyBroadcast() {
   }, 5000);
 }
 
-/**
- * Clean up spam tracker periodically
- */
 setInterval(() => {
   const now = Date.now();
+
   for (const [userId, tracker] of spamTracker) {
     if (now - tracker.lastTime > SPAM_WINDOW * 2) {
       spamTracker.delete(userId);
     }
   }
+
   for (const [userId, time] of commandCooldown) {
     if (now - time > COMMAND_COOLDOWN * 2) {
       commandCooldown.delete(userId);

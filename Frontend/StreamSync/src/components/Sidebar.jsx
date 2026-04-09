@@ -1,4 +1,3 @@
-// components/Sidebar.jsx
 import React from "react";
 
 const NAV_ITEMS = [
@@ -7,12 +6,11 @@ const NAV_ITEMS = [
   { key: "alerts", icon: "🔔", label: "Alertas" },
   { key: "events", icon: "📋", label: "Eventos" },
   { key: "overlay", icon: "🎨", label: "Overlays" },
+  { key: "automation", icon: "🧩", label: "Automatización" },
   { key: "spotify", icon: "🎵", label: "Spotify" },
 ];
 
-const BOTTOM_ITEMS = [
-  { key: "settings", icon: "⚙️", label: "Configuración" },
-];
+const BOTTOM_ITEMS = [{ key: "settings", icon: "⚙️", label: "Configuración" }];
 
 export default function Sidebar({ currentPage, onNavigate }) {
   return (

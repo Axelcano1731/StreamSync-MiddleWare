@@ -57,15 +57,15 @@
     }
   },
   "tts": {
-    "enabled": true,
+    "enabled": false,
     "voice": null,
     "rate": 1.8,
     "pitch": 1,
     "volume": 0.8,
     "maxLength": 200,
-    "filterSpam": true,
+    "filterSpam": false,
     "blockedWords": [],
-    "readUsername": true,
+    "readUsername": false,
     "queueMode": "fifo"
   },
   "overlay": {

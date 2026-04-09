@@ -191,6 +191,27 @@
   color: var(--color-yellow);
 }
 
+.status-badge.running,
+.status-badge.starting {
+  background: var(--color-green-soft);
+  color: var(--color-green);
+}
+
+.status-badge.stopping {
+  background: var(--color-yellow-soft);
+  color: var(--color-yellow);
+}
+
+.status-badge.error {
+  background: var(--color-red-soft);
+  color: var(--color-red);
+}
+
+.status-badge.stopped {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
@@ -226,6 +247,11 @@
 .btn:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-light);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-primary {
@@ -813,6 +839,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* Select */
 .select-field {
+  width: 100%;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
