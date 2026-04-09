@@ -12,6 +12,7 @@ import {
   stopMinecraftServer,
   sendMinecraftCommand,
   getMinecraftEmitter,
+  getSuggestedMinecraftPaths,
 } from '../services/minecraftServerService.js';
 
 function emitConfig(io, config) {
@@ -194,6 +195,13 @@ export default function socketHandler(io) {
       const status = getMinecraftStatus();
       if (typeof callback === 'function') callback(status);
       else socket.emit('minecraftStatus', status);
+    });
+
+    socket.on('getMinecraftSuggestedPaths', (arg1, arg2) => {
+      const { payload, callback } = resolveCallback(arg1, arg2);
+      const version = typeof payload === 'string' ? payload : payload?.minecraftVersion;
+      const paths = getSuggestedMinecraftPaths(version || '1.21');
+      if (typeof callback === 'function') callback(paths);
     });
 
     socket.on('validateMinecraftConfig', async (arg1, arg2) => {

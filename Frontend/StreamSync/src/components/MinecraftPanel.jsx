@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import socket from "../services/socketService";
 
 const QUICK_COMMANDS = [
@@ -8,9 +8,22 @@ const QUICK_COMMANDS = [
   { key: "weather clear", label: "Clima", command: "weather clear" },
 ];
 
+const MINECRAFT_VERSION_OPTIONS = ["1.20", "1.21"];
+
+function isLegacyAutoPath(jar, dir) {
+  const j = jar || "";
+  const d = dir || "";
+  return j.includes("C:\\Minecraft") || d.includes("C:\\Minecraft");
+}
+
 function sanitizeMinecraftConfig(config) {
+  const safeVersion = MINECRAFT_VERSION_OPTIONS.includes(config.minecraftVersion)
+    ? config.minecraftVersion
+    : "1.21";
+
   return {
     ...config,
+    minecraftVersion: safeVersion,
     minMemoryMb: Number(config.minMemoryMb) || 1024,
     maxMemoryMb: Number(config.maxMemoryMb) || 2048,
     port: Number(config.port) || 25565,
@@ -31,6 +44,7 @@ function CheckRow({ ok, label, detail }) {
 
 export default function MinecraftPanel() {
   const [config, setConfig] = useState({
+    minecraftVersion: "1.21",
     javaPath: "java",
     serverJar: "",
     serverDirectory: "",
@@ -45,6 +59,24 @@ export default function MinecraftPanel() {
   const [message, setMessage] = useState("");
   const [validation, setValidation] = useState(null);
   const [isValidating, setIsValidating] = useState(false);
+  const pathsManualRef = useRef(false);
+
+  useEffect(() => {
+    if (pathsManualRef.current) return;
+    const empty = !String(config.serverJar || "").trim() && !String(config.serverDirectory || "").trim();
+    const legacy = isLegacyAutoPath(config.serverJar, config.serverDirectory);
+    if (!empty && !legacy) return;
+
+    socket.emit("getMinecraftSuggestedPaths", config.minecraftVersion, (paths) => {
+      if (!paths) return;
+      setConfig((prev) => ({
+        ...prev,
+        minecraftVersion: paths.minecraftVersion,
+        serverJar: paths.serverJar,
+        serverDirectory: paths.serverDirectory,
+      }));
+    });
+  }, [config.minecraftVersion]);
 
   useEffect(() => {
     socket.emit("getAlertConfig", (cfg) => {
@@ -224,13 +256,34 @@ export default function MinecraftPanel() {
 
           <div className="minecraft-grid">
             <div className="input-group" style={{ marginBottom: 0 }}>
+              <label>Versión del servidor</label>
+              <select
+                className="input-field"
+                value={config.minecraftVersion || "1.21"}
+                onChange={(e) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    minecraftVersion: e.target.value,
+                  }))
+                }
+              >
+                {MINECRAFT_VERSION_OPTIONS.map((version) => (
+                  <option key={version} value={version}>
+                    {version}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="input-group" style={{ marginBottom: 0 }}>
               <label>Ruta del .jar</label>
               <input
                 className="input-field"
                 value={config.serverJar || ""}
-                onChange={(e) =>
-                  setConfig((prev) => ({ ...prev, serverJar: e.target.value }))
-                }
+                onChange={(e) => {
+                  pathsManualRef.current = true;
+                  setConfig((prev) => ({ ...prev, serverJar: e.target.value }));
+                }}
                 placeholder="C:\\Minecraft\\server.jar"
               />
             </div>
@@ -240,12 +293,13 @@ export default function MinecraftPanel() {
               <input
                 className="input-field"
                 value={config.serverDirectory || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  pathsManualRef.current = true;
                   setConfig((prev) => ({
                     ...prev,
                     serverDirectory: e.target.value,
-                  }))
-                }
+                  }));
+                }}
                 placeholder="C:\\Minecraft"
               />
             </div>

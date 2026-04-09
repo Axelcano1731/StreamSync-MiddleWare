@@ -166,6 +166,7 @@ const DEFAULT_CONFIG = {
     items: [],
   },
   minecraft: {
+    minecraftVersion: '1.21',
     javaPath: 'java',
     serverJar: '',
     serverDirectory: '',
