@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamSync Overlay</title>
+  <link rel="stylesheet" href="overlay.css" />
+</head>
+<body>
+  <!-- Alert Container -->
+  <div id="alert-container"></div>
+
+  <!-- Goal Tracker -->
+  <div id="goal-tracker" class="goal-tracker hidden">
+    <div class="goal-header">
+      <span class="goal-icon">🎯</span>
+      <span class="goal-title">Meta</span>
+    </div>
+    <div class="goal-bar">
+      <div class="goal-fill" id="goal-fill"></div>
+    </div>
+    <div class="goal-text" id="goal-text">0 / 0</div>
+  </div>
+
+  <!-- Chat Box Overlay -->
+  <div id="chat-box" class="chat-box hidden">
+    <div class="chat-messages" id="chat-messages"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>

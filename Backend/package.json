@@ -2,11 +2,11 @@
   "name": "streamsync-backend",
   "version": "1.0.0",
   "description": "Backend de StreamSync TikTok Live",
-  "main": "server.js",
+  "main": "Server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node Server.js",
+    "dev": "nodemon Server.js"
   },
   "keywords": [],
   "author": "",

@@ -1,0 +1,6 @@
+owner: Axelcano1731
+repo: StreamSync-MiddleWare
+provider: github
+releaseType: release
+vPrefixedTagName: true
+updaterCacheDirName: streamsync-electron-updater

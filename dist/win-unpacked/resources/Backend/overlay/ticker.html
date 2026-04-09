@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>StreamSync — Event Ticker</title>
+  <link rel="stylesheet" href="widgets.css" />
+</head>
+<body>
+  <div class="ticker-bar">
+    <div class="ticker-label">⚡ STREAM EN VIVO</div>
+    <div class="ticker-track" id="ticker-track">
+      <span class="ticker-item" style="color:rgba(255,255,255,0.3);">Esperando eventos...</span>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="ticker.js"></script>
+</body>
+</html>

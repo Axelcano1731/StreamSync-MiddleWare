@@ -1,0 +1,283 @@
+/* StreamSync — Shared Widget Styles for OBS Overlays */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: transparent;
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  color: #fff;
+}
+
+.hidden { display: none !important; }
+
+/* ═══════ WIDGET CONTAINER ═══════ */
+.widget {
+  position: fixed;
+  background: linear-gradient(135deg, rgba(20, 20, 35, 0.92), rgba(35, 35, 55, 0.88));
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.widget-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.widget-icon { font-size: 1.3em; }
+
+.widget-title {
+  font-weight: 700;
+  font-size: 0.95em;
+  letter-spacing: 0.02em;
+}
+
+.widget-badge {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.7em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ═══════ LEADERBOARD ═══════ */
+.leaderboard { list-style: none; }
+
+.leaderboard-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.4s ease;
+}
+
+.leaderboard-item:last-child { border-bottom: none; }
+
+.rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8em;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rank-1 { background: linear-gradient(135deg, #ffd700, #ff8c00); color: #1a1a2e; }
+.rank-2 { background: linear-gradient(135deg, #c0c0c0, #8e8e93); color: #1a1a2e; }
+.rank-3 { background: linear-gradient(135deg, #cd7f32, #a0522d); color: #fff; }
+.rank-other { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.5); }
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8em;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.user-info { flex: 1; min-width: 0; }
+
+.user-name {
+  font-weight: 600;
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-stat {
+  font-size: 0.75em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.stat-value {
+  font-weight: 700;
+  font-size: 0.95em;
+  flex-shrink: 0;
+}
+
+.stat-value.diamonds { color: #a78bfa; }
+.stat-value.likes { color: #ff6b6b; }
+.stat-value.follows { color: #69db7c; }
+
+/* ═══════ TICKER ═══════ */
+.ticker-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(90deg, rgba(20, 20, 35, 0.95), rgba(35, 35, 55, 0.92));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.ticker-label {
+  background: linear-gradient(135deg, #7c3aed, #ec4899);
+  padding: 0 16px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.8em;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.ticker-track {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  animation: ticker-scroll 30s linear infinite;
+  white-space: nowrap;
+  gap: 40px;
+  padding-left: 20px;
+}
+
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.ticker-item .ticker-icon { font-size: 1em; }
+.ticker-item .ticker-user { font-weight: 600; color: #a78bfa; }
+
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ═══════ NOW PLAYING ═══════ */
+.now-playing {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 320px;
+}
+
+.np-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.np-cover {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.np-cover img { width: 100%; height: 100%; object-fit: cover; }
+
+.np-info { flex: 1; min-width: 0; }
+
+.np-track {
+  font-weight: 700;
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-artist {
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-progress {
+  margin-top: 10px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.np-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1db954, #1ed760);
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+
+.np-spotify-logo {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+/* ═══════ RECENT FOLLOWERS ═══════ */
+.follower-list { display: flex; flex-direction: column; gap: 6px; }
+
+.follower-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  animation: slideInLeft 0.4s ease-out;
+}
+
+.follower-name {
+  font-weight: 600;
+  font-size: 0.85em;
+  flex: 1;
+}
+
+.follower-time {
+  font-size: 0.7em;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ═══════ ANIMATIONS ═══════ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-in { animation: fadeIn 0.4s ease-out forwards; }
+.pulse { animation: pulse 2s ease infinite; }
