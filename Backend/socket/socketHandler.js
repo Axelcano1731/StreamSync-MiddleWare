@@ -7,6 +7,7 @@ import { getSpotifyStatus, getCurrentTrack } from '../services/spotifyService.js
 import { getWebhookHistory, getWebhookEmitter, sendTestWebhook } from '../services/webhookService.js';
 import {
   getMinecraftStatus,
+  validateMinecraftConfig,
   startMinecraftServer,
   stopMinecraftServer,
   sendMinecraftCommand,
@@ -193,6 +194,25 @@ export default function socketHandler(io) {
       const status = getMinecraftStatus();
       if (typeof callback === 'function') callback(status);
       else socket.emit('minecraftStatus', status);
+    });
+
+    socket.on('validateMinecraftConfig', async (arg1, arg2) => {
+      const { payload, callback } = resolveCallback(arg1, arg2);
+
+      try {
+        const result = await validateMinecraftConfig(payload || {});
+        if (callback) {
+          callback({ ok: true, result });
+        } else {
+          socket.emit('minecraftValidation', { ok: true, result });
+        }
+      } catch (error) {
+        if (callback) {
+          callback({ ok: false, error: error.message });
+        } else {
+          socket.emit('minecraftValidation', { ok: false, error: error.message });
+        }
+      }
     });
 
     socket.on('updateMinecraftConfig', (arg1, arg2) => {

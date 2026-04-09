@@ -13,6 +13,7 @@ import EventLog from "./components/EventLog";
 import OverlayPanel from "./components/OverlayPanel";
 import SpotifyPanel from "./components/SpotifyPanel";
 import AutomationPanel from "./components/AutomationPanel";
+import MinecraftPanel from "./components/MinecraftPanel";
 import { VoiceSettings } from "./components/VoiceSettings";
 
 const PAGE_TITLES = {
@@ -22,6 +23,7 @@ const PAGE_TITLES = {
   events: "Log de Eventos",
   overlay: "Overlays",
   automation: "Automatización",
+  minecraft: "Minecraft",
   spotify: "Spotify",
   settings: "Configuración",
 };
@@ -108,6 +110,13 @@ function App() {
         return (
           <div className="main-content">
             <AutomationPanel />
+          </div>
+        );
+
+      case "minecraft":
+        return (
+          <div className="main-content">
+            <MinecraftPanel />
           </div>
         );
 

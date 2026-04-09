@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import socket from "../services/socketService";
 
 const EVENT_TYPES = [
@@ -46,104 +46,37 @@ function sanitizeId(value) {
   return base || `item-${Date.now()}`;
 }
 
-function sanitizeMinecraftConfig(config) {
-  return {
-    ...config,
-    minMemoryMb: Number(config.minMemoryMb) || 1024,
-    maxMemoryMb: Number(config.maxMemoryMb) || 2048,
-    port: Number(config.port) || 25565,
-  };
-}
-
 export default function AutomationPanel() {
   const [config, setConfig] = useState(null);
   const [webhookDraft, setWebhookDraft] = useState(createEmptyWebhook());
   const [editingWebhookId, setEditingWebhookId] = useState(null);
   const [webhookHistory, setWebhookHistory] = useState([]);
-  const [minecraftStatus, setMinecraftStatus] = useState(null);
-  const [minecraftDraft, setMinecraftDraft] = useState({
-    javaPath: "java",
-    serverJar: "",
-    serverDirectory: "",
-    minMemoryMb: 2048,
-    maxMemoryMb: 4096,
-    port: 25565,
-    autoAcceptEula: false,
-    startupArgs: "",
-  });
-  const [minecraftCommand, setMinecraftCommand] = useState("");
-  const [webhookMessage, setWebhookMessage] = useState("");
-  const [minecraftMessage, setMinecraftMessage] = useState("");
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     socket.emit("getAlertConfig", (cfg) => {
       setConfig(cfg);
-      if (cfg?.minecraft) {
-        setMinecraftDraft(cfg.minecraft);
-      }
     });
 
     socket.emit("getWebhookHistory", (history) => {
       setWebhookHistory(Array.isArray(history) ? history : []);
     });
 
-    socket.emit("getMinecraftStatus", (status) => {
-      setMinecraftStatus(status);
-      if (status?.config) {
-        setMinecraftDraft(status.config);
-      }
-    });
-
-    const handleConfig = (cfg) => {
-      setConfig(cfg);
-      if (cfg?.minecraft) {
-        setMinecraftDraft((prev) => ({
-          ...prev,
-          ...cfg.minecraft,
-        }));
-      }
-    };
-
+    const handleConfig = (cfg) => setConfig(cfg);
     const handleWebhookDelivery = (entry) => {
       setWebhookHistory((prev) => [entry, ...prev].slice(0, 50));
     };
 
-    const handleMinecraftStatus = (status) => {
-      setMinecraftStatus(status);
-      if (status?.config) {
-        setMinecraftDraft((prev) => ({
-          ...prev,
-          ...status.config,
-        }));
-      }
-    };
-
-    const handleMinecraftLog = (entry) => {
-      setMinecraftStatus((prev) => {
-        if (!prev) return prev;
-        const logs = [...(prev.logs || []), entry].slice(-250);
-        return { ...prev, logs };
-      });
-    };
-
     socket.on("alertConfig", handleConfig);
     socket.on("webhookDelivery", handleWebhookDelivery);
-    socket.on("minecraftStatus", handleMinecraftStatus);
-    socket.on("minecraftLog", handleMinecraftLog);
 
     return () => {
       socket.off("alertConfig", handleConfig);
       socket.off("webhookDelivery", handleWebhookDelivery);
-      socket.off("minecraftStatus", handleMinecraftStatus);
-      socket.off("minecraftLog", handleMinecraftLog);
     };
   }, []);
 
   const webhooks = config?.webhooks?.items || [];
-  const minecraftLogs = useMemo(
-    () => (minecraftStatus?.logs || []).slice(-80).reverse(),
-    [minecraftStatus]
-  );
 
   const saveWebhooks = (items) => {
     if (!config) return;
@@ -187,16 +120,16 @@ export default function AutomationPanel() {
       saveWebhooks(nextItems);
       setEditingWebhookId(null);
       setWebhookDraft(createEmptyWebhook());
-      setWebhookMessage("Webhook guardado correctamente.");
+      setMessage("Webhook guardado correctamente.");
     } catch (error) {
-      setWebhookMessage(`Encabezados JSON inválidos: ${error.message}`);
+      setMessage(`Encabezados JSON inválidos: ${error.message}`);
     }
   };
 
   const handleEditWebhook = (webhook) => {
     setEditingWebhookId(webhook.id);
     setWebhookDraft(webhookToDraft(webhook));
-    setWebhookMessage("");
+    setMessage("");
   };
 
   const handleDeleteWebhook = (webhookId) => {
@@ -205,62 +138,16 @@ export default function AutomationPanel() {
       setEditingWebhookId(null);
       setWebhookDraft(createEmptyWebhook());
     }
-    setWebhookMessage("Webhook eliminado.");
+    setMessage("Webhook eliminado.");
   };
 
   const handleTestWebhook = (webhookId) => {
     socket.emit("testWebhook", webhookId, (response) => {
-      setWebhookMessage(
+      setMessage(
         response?.ok
           ? "Prueba enviada correctamente."
           : `No se pudo probar el webhook: ${response?.error || "Error desconocido"}`
       );
-    });
-  };
-
-  const handleSaveMinecraftConfig = () => {
-    const payload = sanitizeMinecraftConfig(minecraftDraft);
-    socket.emit("updateMinecraftConfig", payload, (response) => {
-      setMinecraftMessage(
-        response?.ok
-          ? "Configuración de Minecraft guardada."
-          : `No se pudo guardar: ${response?.error || "Error desconocido"}`
-      );
-    });
-  };
-
-  const handleStartMinecraft = () => {
-    const payload = sanitizeMinecraftConfig(minecraftDraft);
-    socket.emit("startMinecraftServer", payload, (response) => {
-      setMinecraftMessage(
-        response?.ok
-          ? `Servidor iniciando en ${response.status?.address || "localhost:25565"}`
-          : `No se pudo iniciar: ${response?.error || "Error desconocido"}`
-      );
-    });
-  };
-
-  const handleStopMinecraft = () => {
-    socket.emit("stopMinecraftServer", (response) => {
-      setMinecraftMessage(
-        response?.ok
-          ? "Solicitud de apagado enviada al servidor."
-          : `No se pudo detener: ${response?.error || "Error desconocido"}`
-      );
-    });
-  };
-
-  const handleSendMinecraftCommand = () => {
-    if (!minecraftCommand.trim()) return;
-    socket.emit("sendMinecraftCommand", minecraftCommand.trim(), (response) => {
-      setMinecraftMessage(
-        response?.ok
-          ? `Comando enviado: ${minecraftCommand.trim()}`
-          : `No se pudo enviar el comando: ${response?.error || "Error desconocido"}`
-      );
-      if (response?.ok) {
-        setMinecraftCommand("");
-      }
     });
   };
 
@@ -282,9 +169,9 @@ export default function AutomationPanel() {
       <div className="panel">
         <div className="panel-header">
           <div>
-            <div className="panel-title">Automatización del Stream</div>
+            <div className="panel-title">Automatización por Webhooks</div>
             <div className="panel-subtitle">
-              Webhooks para integraciones externas y control local de Minecraft.
+              Dispara integraciones externas con los eventos del directo.
             </div>
           </div>
         </div>
@@ -298,6 +185,11 @@ export default function AutomationPanel() {
             `user`, `data` y `meta`. Si configuras un secreto, también se envía
             `X-StreamSync-Signature` con firma HMAC SHA256.
           </div>
+          {message ? (
+            <div style={{ marginTop: 10, fontSize: "0.82em", color: "var(--text-secondary)" }}>
+              {message}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -454,20 +346,12 @@ export default function AutomationPanel() {
                 onClick={() => {
                   setEditingWebhookId(null);
                   setWebhookDraft(createEmptyWebhook());
-                  setWebhookMessage("");
+                  setMessage("");
                 }}
               >
                 Limpiar
               </button>
             </div>
-
-            {webhookMessage ? (
-              <div className="alert-config-card" style={{ padding: 12 }}>
-                <div style={{ fontSize: "0.82em", color: "var(--text-secondary)" }}>
-                  {webhookMessage}
-                </div>
-              </div>
-            ) : null}
           </div>
         </div>
 
@@ -557,9 +441,7 @@ export default function AutomationPanel() {
                     second: "2-digit",
                   })}
                 </span>
-                <span className="event-log-icon">
-                  {entry.ok ? "✅" : "⚠️"}
-                </span>
+                <span className="event-log-icon">{entry.ok ? "✅" : "⚠️"}</span>
                 <div className="event-log-content">
                   <span className="event-log-user">{entry.webhookName}</span>{" "}
                   {entry.eventType} · {entry.httpStatus || entry.error || "sin respuesta"}
@@ -571,220 +453,6 @@ export default function AutomationPanel() {
               <div className="empty-state-text">Sin entregas todavía.</div>
             </div>
           )}
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-header">
-          <div>
-            <div className="panel-title">Servidor Local de Minecraft</div>
-            <div className="panel-subtitle">
-              Levanta un servidor Java desde la app y contrólalo por localhost.
-            </div>
-          </div>
-
-          <div className={`status-badge ${minecraftStatus?.status || "stopped"}`}>
-            <span className="status-dot"></span>
-            {(minecraftStatus?.status || "stopped").toUpperCase()}
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label>Ruta del .jar</label>
-            <input
-              className="input-field"
-              value={minecraftDraft.serverJar || ""}
-              onChange={(e) =>
-                setMinecraftDraft((prev) => ({ ...prev, serverJar: e.target.value }))
-              }
-              placeholder="C:\\Minecraft\\server.jar"
-            />
-          </div>
-
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label>Carpeta del servidor</label>
-            <input
-              className="input-field"
-              value={minecraftDraft.serverDirectory || ""}
-              onChange={(e) =>
-                setMinecraftDraft((prev) => ({
-                  ...prev,
-                  serverDirectory: e.target.value,
-                }))
-              }
-              placeholder="C:\\Minecraft"
-            />
-          </div>
-
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label>Ruta de Java</label>
-            <input
-              className="input-field"
-              value={minecraftDraft.javaPath || ""}
-              onChange={(e) =>
-                setMinecraftDraft((prev) => ({ ...prev, javaPath: e.target.value }))
-              }
-              placeholder="java"
-            />
-          </div>
-
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label>Puerto local</label>
-            <input
-              className="input-field"
-              type="number"
-              value={minecraftDraft.port || 25565}
-              onChange={(e) =>
-                setMinecraftDraft((prev) => ({ ...prev, port: e.target.value }))
-              }
-            />
-          </div>
-
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label>Memoria mínima (MB)</label>
-            <input
-              className="input-field"
-              type="number"
-              value={minecraftDraft.minMemoryMb || 1024}
-              onChange={(e) =>
-                setMinecraftDraft((prev) => ({
-                  ...prev,
-                  minMemoryMb: e.target.value,
-                }))
-              }
-            />
-          </div>
-
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label>Memoria máxima (MB)</label>
-            <input
-              className="input-field"
-              type="number"
-              value={minecraftDraft.maxMemoryMb || 2048}
-              onChange={(e) =>
-                setMinecraftDraft((prev) => ({
-                  ...prev,
-                  maxMemoryMb: e.target.value,
-                }))
-              }
-            />
-          </div>
-        </div>
-
-        <div className="input-group" style={{ marginBottom: 16 }}>
-          <label>Argumentos extra de arranque</label>
-          <input
-            className="input-field"
-            value={minecraftDraft.startupArgs || ""}
-            onChange={(e) =>
-              setMinecraftDraft((prev) => ({
-                ...prev,
-                startupArgs: e.target.value,
-              }))
-            }
-            placeholder="-Dcom.mojang.eula.agree=true"
-          />
-        </div>
-
-        <div className="config-row" style={{ marginBottom: 16 }}>
-          <span className="config-label">Aceptar automáticamente el EULA</span>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={minecraftDraft.autoAcceptEula ?? false}
-              onChange={(e) =>
-                setMinecraftDraft((prev) => ({
-                  ...prev,
-                  autoAcceptEula: e.target.checked,
-                }))
-              }
-            />
-            <span className="toggle-slider"></span>
-          </label>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-          <button className="btn" onClick={handleSaveMinecraftConfig}>
-            Guardar Configuración
-          </button>
-          <button className="btn btn-primary" onClick={handleStartMinecraft}>
-            Iniciar Servidor
-          </button>
-          <button className="btn btn-danger" onClick={handleStopMinecraft}>
-            Detener Servidor
-          </button>
-        </div>
-
-        <div
-          className="alert-config-card"
-          style={{ display: "grid", gap: 12, marginBottom: 16 }}
-        >
-          <div className="config-row">
-            <span className="config-label">Dirección publicada</span>
-            <span className="config-value">{minecraftStatus?.address || "localhost:25565"}</span>
-          </div>
-
-          <div style={{ display: "flex", gap: 10 }}>
-            <input
-              className="input-field"
-              value={minecraftCommand}
-              onChange={(e) => setMinecraftCommand(e.target.value)}
-              placeholder="say Hola chat"
-              disabled={!minecraftStatus?.isRunning}
-            />
-            <button className="btn" onClick={handleSendMinecraftCommand} disabled={!minecraftStatus?.isRunning}>
-              Enviar
-            </button>
-          </div>
-        </div>
-
-        {minecraftMessage ? (
-          <div className="alert-config-card" style={{ padding: 12, marginBottom: 16 }}>
-            <div style={{ fontSize: "0.82em", color: "var(--text-secondary)" }}>
-              {minecraftMessage}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="alert-config-card">
-          <div className="alert-config-title" style={{ marginBottom: 10 }}>
-            <span>📜</span> Consola del servidor
-          </div>
-          <div
-            style={{
-              background: "rgba(0,0,0,0.35)",
-              borderRadius: 10,
-              padding: 12,
-              maxHeight: 280,
-              overflowY: "auto",
-              fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
-              fontSize: "0.78em",
-              lineHeight: 1.6,
-              color: "var(--text-secondary)",
-            }}
-          >
-            {minecraftLogs.length > 0 ? (
-              minecraftLogs.map((entry) => (
-                <div key={entry.id}>
-                  [{new Date(entry.timestamp).toLocaleTimeString("es", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}] {entry.source}: {entry.line}
-                </div>
-              ))
-            ) : (
-              <div>Sin logs todavía.</div>
-            )}
-          </div>
         </div>
       </div>
     </div>

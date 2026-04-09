@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { key: "events", icon: "📋", label: "Eventos" },
   { key: "overlay", icon: "🎨", label: "Overlays" },
   { key: "automation", icon: "🧩", label: "Automatización" },
+  { key: "minecraft", icon: "⛏️", label: "Minecraft" },
   { key: "spotify", icon: "🎵", label: "Spotify" },
 ];
 

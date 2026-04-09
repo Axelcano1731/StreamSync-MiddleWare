@@ -896,6 +896,156 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--accent-secondary);
 }
 
+.minecraft-hero-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.14), transparent 40%),
+    linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(124, 58, 237, 0.08));
+  border: 1px solid var(--border-subtle);
+}
+
+.minecraft-hero-title {
+  font-size: 0.78em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.minecraft-hero-value {
+  font-size: 0.92em;
+  color: var(--text-primary);
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.minecraft-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.minecraft-info-card {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 0.84em;
+}
+
+.minecraft-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.minecraft-check-row:last-child {
+  border-bottom: none;
+}
+
+.minecraft-check-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.minecraft-check-dot.ok {
+  background: var(--color-green);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12);
+}
+
+.minecraft-check-dot.error {
+  background: var(--color-red);
+  box-shadow: 0 0 0 4px rgba(255, 0, 80, 0.12);
+}
+
+.minecraft-check-label {
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.minecraft-check-detail {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  margin-top: 4px;
+  word-break: break-word;
+}
+
+.minecraft-validation-errors,
+.minecraft-validation-ok {
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 0.82em;
+  line-height: 1.6;
+}
+
+.minecraft-validation-errors {
+  background: var(--color-red-soft);
+  color: var(--color-red);
+  border: 1px solid rgba(255, 0, 80, 0.2);
+}
+
+.minecraft-validation-ok {
+  background: var(--color-green-soft);
+  color: var(--color-green);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.minecraft-console {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  max-height: 360px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.78em;
+  line-height: 1.65;
+}
+
+.minecraft-console-line {
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.minecraft-console-time {
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.minecraft-console-source {
+  display: inline-block;
+  min-width: 60px;
+  margin-right: 8px;
+  text-transform: uppercase;
+  font-size: 0.92em;
+}
+
+.minecraft-console-source.stdout {
+  color: var(--color-green);
+}
+
+.minecraft-console-source.stderr {
+  color: var(--color-red);
+}
+
+.minecraft-console-source.command {
+  color: var(--color-yellow);
+}
+
+.minecraft-console-source.system {
+  color: var(--accent-secondary);
+}
+
 /* ═══════ FILTER TABS ═══════ */
 .filter-tabs {
   display: flex;

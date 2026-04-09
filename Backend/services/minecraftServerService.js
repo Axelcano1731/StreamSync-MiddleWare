@@ -94,6 +94,53 @@ function parseStartupArgs(extraArgs = '') {
     .filter(Boolean);
 }
 
+function runProcess(command, args = [], options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      windowsHide: true,
+      ...options,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const timeoutMs = options.timeoutMs || 8000;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      reject(new Error('Timeout'));
+    }, timeoutMs);
+
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr?.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.once('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    });
+
+    child.once('exit', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve({
+        code,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+      });
+    });
+  });
+}
+
 function setStoppedState(code, signal) {
   appendLog(
     'system',
@@ -124,6 +171,65 @@ export function getMinecraftStatus() {
     ...runtimeState,
     address: `localhost:${port}`,
     isRunning: ['starting', 'running', 'stopping'].includes(runtimeState.status),
+    config,
+  };
+}
+
+export async function validateMinecraftConfig(overrides = {}) {
+  const config = getEffectiveConfig(overrides);
+  const issues = [];
+
+  const hasServerJar = Boolean(config.serverJar);
+  const serverJarExists = hasServerJar && fs.existsSync(config.serverJar);
+  const hasServerDirectory = Boolean(config.serverDirectory);
+  const serverDirectoryExists = hasServerDirectory && fs.existsSync(config.serverDirectory);
+  const eulaPath = hasServerDirectory ? path.join(config.serverDirectory, 'eula.txt') : null;
+  const eulaExists = Boolean(eulaPath && fs.existsSync(eulaPath));
+
+  if (!hasServerJar) {
+    issues.push('Falta la ruta del archivo .jar del servidor.');
+  } else if (!serverJarExists) {
+    issues.push(`No se encontró el .jar en ${config.serverJar}.`);
+  }
+
+  if (!hasServerDirectory) {
+    issues.push('Falta la carpeta del servidor.');
+  } else if (!serverDirectoryExists) {
+    issues.push(`No se encontró la carpeta ${config.serverDirectory}.`);
+  }
+
+  if ((config.minMemoryMb || 0) > (config.maxMemoryMb || 0)) {
+    issues.push('La memoria mínima no puede ser mayor que la máxima.');
+  }
+
+  let javaOk = false;
+  let javaVersion = null;
+  let javaError = null;
+
+  try {
+    const javaResult = await runProcess(config.javaPath || 'java', ['-version']);
+    javaOk = javaResult.code === 0 || Boolean(javaResult.stderr || javaResult.stdout);
+    javaVersion = javaResult.stderr.split('\n')[0] || javaResult.stdout.split('\n')[0] || null;
+  } catch (error) {
+    javaError = error.message;
+    issues.push(`No se pudo ejecutar Java con "${config.javaPath || 'java'}".`);
+  }
+
+  return {
+    ok: issues.length === 0 && javaOk,
+    issues,
+    checks: {
+      javaOk,
+      javaVersion,
+      javaError,
+      hasServerJar,
+      serverJarExists,
+      hasServerDirectory,
+      serverDirectoryExists,
+      eulaExists,
+      autoAcceptEula: Boolean(config.autoAcceptEula),
+      address: `localhost:${config.port || 25565}`,
+    },
     config,
   };
 }
