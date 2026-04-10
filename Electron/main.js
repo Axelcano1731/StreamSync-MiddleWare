@@ -1,81 +1,159 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
 
-let mainWindow;
-let backendProcess;
+let mainWindow = null;
+let backendController = null;
+let updateInterval = null;
 
-// Detectar si estamos en desarrollo
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-function createWindow() {
+function getResourcePath(...segments) {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, ...segments);
+  }
+
+  return path.join(__dirname, '..', ...segments);
+}
+
+async function startBackend() {
+  const backendEntry = getResourcePath('Backend', 'Server.js');
+  const backendModule = await import(pathToFileURL(backendEntry).href);
+
+  backendController = backendModule;
+  await backendModule.startBackendServer({ port: 3000 });
+}
+
+async function stopBackend() {
+  if (backendController?.stopBackendServer) {
+    try {
+      await backendController.stopBackendServer();
+    } catch (error) {
+      console.error('❌ Error cerrando el backend:', error);
+    }
+  }
+}
+
+async function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1280,
+    height: 840,
+    minWidth: 1120,
+    minHeight: 720,
+    show: false,
+    autoHideMenuBar: true,
+    title: 'StreamSync',
+    backgroundColor: '#0f0f14',
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
     },
   });
 
   if (isDev) {
-    // 👉 Cargar Vite server en desarrollo
-    mainWindow.loadURL('http://localhost:5173');
+    await mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    // 👉 Cargar build en producción
-    mainWindow.loadFile(path.join(__dirname, '../frontend/dist/index.html'));
+    await mainWindow.loadFile(getResourcePath('frontend-dist', 'index.html'));
   }
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
-    if (backendProcess) backendProcess.kill();
   });
 }
 
-function startBackend() {
-  backendProcess = spawn('node', ['server.js'], {
-    cwd: path.join(__dirname, '../backend'),
-    stdio: 'inherit',
-    shell: true
-  });
-}
-
-// Manejo de autoUpdater (solo producción)
 function setupAutoUpdater() {
+  if (isDev) {
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('🔎 Buscando actualizaciones...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log(`⚡ Update disponible: ${info.version}`);
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    console.log('✅ Ya estás en la versión más reciente');
+  });
+
+  autoUpdater.on('error', (error) => {
+    console.error('❌ Error en autoUpdater:', error);
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    console.log(`⬇️ Descargando update: ${Math.round(progress.percent)}%`);
+  });
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    const { response } = await dialog.showMessageBox({
+      type: 'info',
+      buttons: ['Reiniciar ahora', 'Después'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Actualización lista',
+      message: `La versión ${info.version} ya se descargó.`,
+      detail: 'StreamSync puede reiniciarse ahora para instalar la actualización.',
+    });
+
+    if (response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
   autoUpdater.checkForUpdatesAndNotify();
 
-  autoUpdater.on('update-available', () => {
-    console.log('⚡ Update disponible. Descargando...');
-  });
-
-  autoUpdater.on('update-downloaded', () => {
-    console.log('✅ Update descargada. Se aplicará al reiniciar.');
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.error('❌ Error en autoUpdater:', err);
-  });
+  clearInterval(updateInterval);
+  updateInterval = setInterval(() => {
+    autoUpdater.checkForUpdates().catch((error) => {
+      console.error('❌ No se pudo verificar actualizaciones:', error);
+    });
+  }, 1000 * 60 * 30);
 }
 
-app.on('ready', () => {
-  startBackend();
-  createWindow();
-
-  if (isDev) {
-    mainWindow.webContents.openDevTools(); // Opcional: abre las devtools
-  } else {
-    setupAutoUpdater(); // 👉 Solo en producción
-  }
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+async function initializeApp() {
+  try {
+    await startBackend();
+    await createWindow();
+    setupAutoUpdater();
+  } catch (error) {
+    console.error('❌ No se pudo iniciar StreamSync Desktop:', error);
+    dialog.showErrorBox(
+      'Error al iniciar StreamSync',
+      `${error.message}\n\nRevisa que el frontend esté compilado y que el puerto 3000 esté libre.`
+    );
     app.quit();
-    if (backendProcess) backendProcess.kill();
+  }
+}
+
+app.whenReady().then(initializeApp);
+
+app.on('window-all-closed', async () => {
+  clearInterval(updateInterval);
+
+  if (process.platform !== 'darwin') {
+    await stopBackend();
+    app.quit();
   }
 });
 
-app.on('activate', () => {
-  if (mainWindow === null) createWindow();
+app.on('before-quit', async () => {
+  clearInterval(updateInterval);
+  await stopBackend();
+});
+
+app.on('activate', async () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    await createWindow();
+  }
 });

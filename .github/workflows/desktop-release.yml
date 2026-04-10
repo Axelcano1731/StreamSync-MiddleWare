@@ -1,0 +1,51 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm ci --prefix Backend
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix Frontend/StreamSync
+
+      - name: Install electron dependencies
+        run: npm ci --prefix Electron
+
+      - name: Sync Electron version with tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag) {
+            $version = $tag -replace '^v', ''
+            $pkg = Get-Content Electron/package.json | ConvertFrom-Json
+            $pkg.version = $version
+            $pkg | ConvertTo-Json -Depth 100 | Set-Content Electron/package.json -Encoding UTF8
+          }
+
+      - name: Build and publish Windows installer
+        run: npm run release:desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -77,3 +77,8 @@ temp/
 # Logs globales
 logs/
 *.log
+
+########################################
+# Games (interactive stream overlays)
+########################################
+games/

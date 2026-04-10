@@ -4,38 +4,83 @@
   "description": "Aplicación de escritorio StreamSync usando Electron",
   "author": "Axel Cano",
   "main": "main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Axelcano1731/StreamSync-MiddleWare.git"
+  },
   "scripts": {
     "start": "electron .",
     "dev": "cross-env NODE_ENV=development electron .",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "build:win": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis",
+    "release:win": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis --publish always"
   },
   "build": {
     "appId": "com.streamsync.desktop",
     "productName": "StreamSync",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
     "directories": {
-      "output": "../dist"
+      "output": "../dist",
+      "buildResources": "buildResources"
     },
     "files": [
       "main.js",
-      "package.json",
-      "../backend/**",
-      "../frontend/dist/**"
+      "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "../Backend",
+        "to": "Backend",
+        "filter": [
+          "**/*",
+          "!node_modules/**"
+        ]
+      },
+      {
+        "from": "../Frontend/StreamSync/dist",
+        "to": "frontend-dist"
+      },
+      {
+        "from": "../games",
+        "to": "games"
+      }
+    ],
+    "asar": true,
     "win": {
-      "target": ["nsis"],
-      "icon": "icon.ico"
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "perMachine": false
     },
     "publish": [
       {
         "provider": "github",
-        "owner": "TU_USUARIO_GITHUB",
-        "repo": "StreamSync-MiddleWare"
+        "owner": "Axelcano1731",
+        "repo": "StreamSync-MiddleWare",
+        "releaseType": "release",
+        "vPrefixedTagName": true
       }
     ]
   },
   "dependencies": {
-    "electron-updater": "^6.6.2"
+    "cors": "^2.8.5",
+    "electron-updater": "^6.6.2",
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "streamsync": "file:..",
+    "tiktok-live-connector": "^2.0.7-beta1"
   },
   "devDependencies": {
     "cross-env": "^10.0.0",

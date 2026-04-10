@@ -1,0 +1,161 @@
+{
+  "alerts": {
+    "gift": {
+      "enabled": true,
+      "sound": "default_gift.mp3",
+      "volume": 0.8,
+      "duration": 5000,
+      "animation": "slideIn",
+      "minDiamonds": 1,
+      "showOverlay": true,
+      "tts": false,
+      "titleTemplate": "Nuevo regalo",
+      "messageTemplate": "{user} envio {repeatCount}x {giftName}"
+    },
+    "follow": {
+      "enabled": true,
+      "sound": "default_follow.mp3",
+      "volume": 0.6,
+      "duration": 3000,
+      "animation": "fadeIn",
+      "showOverlay": true,
+      "tts": false,
+      "titleTemplate": "Nuevo seguidor",
+      "messageTemplate": "{user} empezo a seguirte"
+    },
+    "share": {
+      "enabled": true,
+      "sound": "default_share.mp3",
+      "volume": 0.5,
+      "duration": 3000,
+      "animation": "fadeIn",
+      "showOverlay": true,
+      "tts": false,
+      "titleTemplate": "Directo compartido",
+      "messageTemplate": "{user} compartio tu live"
+    },
+    "chat": {
+      "enabled": true,
+      "sound": null,
+      "volume": 0.5,
+      "duration": 0,
+      "animation": "none",
+      "showOverlay": false,
+      "tts": true,
+      "titleTemplate": "Nuevo comentario",
+      "messageTemplate": "{user}: {comment}"
+    },
+    "like": {
+      "enabled": true,
+      "sound": null,
+      "volume": 0.3,
+      "duration": 2000,
+      "animation": "pop",
+      "showOverlay": false,
+      "tts": false,
+      "titleTemplate": "Likes en vivo",
+      "messageTemplate": "{user} envio {likeCount} likes"
+    },
+    "memberJoin": {
+      "enabled": false,
+      "sound": null,
+      "volume": 0.3,
+      "duration": 2000,
+      "animation": "fadeIn",
+      "showOverlay": false,
+      "tts": false,
+      "titleTemplate": "Nuevo viewer",
+      "messageTemplate": "{user} se unio al directo"
+    }
+  },
+  "tts": {
+    "enabled": true,
+    "voice": null,
+    "rate": 1.8,
+    "pitch": 1,
+    "volume": 0.8,
+    "maxLength": 200,
+    "filterSpam": false,
+    "blockedWords": [],
+    "readUsername": false,
+    "queueMode": "fifo"
+  },
+  "overlay": {
+    "position": "top-right",
+    "maxAlerts": 3,
+    "theme": "dark",
+    "customCSS": "",
+    "defaultPresetId": "overlay-main",
+    "presets": [
+      {
+        "id": "overlay-main",
+        "name": "Overlay Principal",
+        "description": "Alertas, chat y metas en una sola escena.",
+        "accentColor": "#7c3aed",
+        "theme": "dark",
+        "backgroundStyle": "glass",
+        "position": "top-right",
+        "maxAlerts": 3,
+        "showChatBox": true,
+        "showGoalTracker": true,
+        "width": 1920,
+        "height": 1080,
+        "chatPlacement": "bottom-left",
+        "goalPlacement": "bottom-center"
+      },
+      {
+        "id": "overlay-compact",
+        "name": "Overlay Compacto",
+        "description": "Solo alertas rapidas para escenas mas cargadas.",
+        "accentColor": "#ec4899",
+        "theme": "dark",
+        "backgroundStyle": "solid",
+        "position": "top-right",
+        "maxAlerts": 2,
+        "showChatBox": false,
+        "showGoalTracker": false,
+        "width": 1280,
+        "height": 720,
+        "chatPlacement": "bottom-left",
+        "goalPlacement": "bottom-center"
+      }
+    ]
+  },
+  "goals": {
+    "likes": {
+      "target": 0,
+      "current": 0,
+      "enabled": false
+    },
+    "followers": {
+      "target": 0,
+      "current": 0,
+      "enabled": false
+    },
+    "gifts": {
+      "target": 0,
+      "current": 0,
+      "enabled": false
+    },
+    "diamonds": {
+      "target": 0,
+      "current": 0,
+      "enabled": false
+    }
+  },
+  "webhooks": {
+    "timeoutMs": 8000,
+    "items": []
+  },
+  "minecraft": {
+    "minecraftVersion": "1.21",
+    "javaPath": "java",
+    "serverJar": "C:\\Minecraft\\1.21\\server.jar",
+    "serverDirectory": "C:\\Minecraft\\1.21",
+    "minMemoryMb": 2048,
+    "maxMemoryMb": 4096,
+    "port": 25565,
+    "autoAcceptEula": true,
+    "startupArgs": ""
+  }
+}

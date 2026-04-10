@@ -1,0 +1,16 @@
+{
+  "name": "streamsync",
+  "version": "1.0.0",
+  "description": "StreamSync - Competitive Streaming Middleware",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix Backend\" \"npm run dev --prefix Frontend/StreamSync\"",
+    "dev:desktop": "concurrently \"npm run dev --prefix Frontend/StreamSync\" \"npm run dev --prefix Electron\"",
+    "install:all": "npm install && npm install --prefix Backend && npm install --prefix Frontend/StreamSync && npm install --prefix Electron",
+    "build:frontend": "npm run build --prefix Frontend/StreamSync",
+    "build:desktop": "npm run build --prefix Frontend/StreamSync && npm run build:win --prefix Electron",
+    "release:desktop": "npm run build --prefix Frontend/StreamSync && npm run release:win --prefix Electron"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
