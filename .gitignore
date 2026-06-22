@@ -70,6 +70,8 @@ Thumbs.db
 release/
 uploads/
 temp/
+dist/
+.build-staging/
 
 ########################################
 # Otros archivos innecesarios

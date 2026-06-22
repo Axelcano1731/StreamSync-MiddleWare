@@ -3,12 +3,14 @@ import React from "react";
 const NAV_ITEMS = [
   { key: "dashboard", icon: "📊", label: "Dashboard" },
   { key: "chat", icon: "💬", label: "Chat" },
+  { key: "stickers", icon: "🔊", label: "Sticker Sounds" },
   { key: "alerts", icon: "🔔", label: "Alertas" },
   { key: "events", icon: "📋", label: "Eventos" },
   { key: "overlay", icon: "🎨", label: "Overlays" },
   { key: "automation", icon: "🧩", label: "Automatización" },
   { key: "minecraft", icon: "⛏️", label: "Minecraft" },
   { key: "spotify", icon: "🎵", label: "Spotify" },
+  { key: "wordle", icon: "🟩", label: "Wordle" },
 ];
 
 const BOTTOM_ITEMS = [{ key: "settings", icon: "⚙️", label: "Configuración" }];

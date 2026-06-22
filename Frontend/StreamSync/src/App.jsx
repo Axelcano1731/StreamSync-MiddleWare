@@ -15,16 +15,21 @@ import SpotifyPanel from "./components/SpotifyPanel";
 import AutomationPanel from "./components/AutomationPanel";
 import MinecraftPanel from "./components/MinecraftPanel";
 import { VoiceSettings } from "./components/VoiceSettings";
+import WordlePanel from "./components/WordlePanel";
+import ChatPanel from "./components/ChatPanel";
+import StickerSoundsPanel from "./components/StickerSoundsPanel";
 
 const PAGE_TITLES = {
   dashboard: "Dashboard",
   chat: "Chat en Vivo",
+  stickers: "Sonidos de Stickers",
   alerts: "Alertas",
   events: "Log de Eventos",
   overlay: "Overlays",
   automation: "Automatización",
   minecraft: "Minecraft",
   spotify: "Spotify",
+  wordle: "StreamWordle",
   settings: "Configuración",
 };
 
@@ -80,7 +85,14 @@ function App() {
         if (!isLiveConnected) return renderConnectGate();
         return (
           <div className="main-content">
-            <InteractionsPanel events={events} topDonors={topDonors} />
+            <ChatPanel events={events} />
+          </div>
+        );
+
+      case "stickers":
+        return (
+          <div className="main-content">
+            <StickerSoundsPanel />
           </div>
         );
 
@@ -124,6 +136,13 @@ function App() {
         return (
           <div className="main-content">
             <SpotifyPanel />
+          </div>
+        );
+
+      case "wordle":
+        return (
+          <div className="main-content">
+            <WordlePanel />
           </div>
         );
 
