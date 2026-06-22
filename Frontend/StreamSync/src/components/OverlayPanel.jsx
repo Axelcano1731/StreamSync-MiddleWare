@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import socket from "../services/socketService";
 
-const BACKEND_URL = "http://localhost:3000";
+const params = new URLSearchParams(window.location.search);
+const backendPort = params.get('backendPort') || '3000';
+const BACKEND_URL = `http://localhost:${backendPort}`;
 
 const BUILTIN_WIDGETS = [
   {

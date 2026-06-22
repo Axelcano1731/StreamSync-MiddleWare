@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { EventEmitter } from 'events';
 import { spawn } from 'child_process';
@@ -20,9 +21,176 @@ let runtimeState = {
   logs: [],
 };
 
+const SUPPORTED_VERSIONS = new Set(['1.20', '1.21']);
+const DEFAULT_VERSION = '1.21';
+
+function normalizeVersion(version) {
+  const safeVersion = String(version || DEFAULT_VERSION).trim();
+  return SUPPORTED_VERSIONS.has(safeVersion) ? safeVersion : DEFAULT_VERSION;
+}
+
+/**
+ * Misma carpeta base que muestra TLauncher: %APPDATA%\.minecraft
+ * (no confundir con el servidor dedicado: ahí va un server.jar aparte).
+ */
+export function getRoamingMinecraftRoot() {
+  if (process.platform === 'win32' && process.env.APPDATA) {
+    return path.join(process.env.APPDATA, '.minecraft');
+  }
+  return path.join(os.homedir(), '.minecraft');
+}
+
+function inferPathsFromVersion(version) {
+  const normalizedVersion = normalizeVersion(version);
+  const base = path.join(getRoamingMinecraftRoot(), 'minecraft-server', normalizedVersion);
+
+  return {
+    version: normalizedVersion,
+    serverDirectory: base,
+    serverJar: path.join(base, 'server.jar'),
+  };
+}
+
+const SKIP_MINECRAFT_WALK_DIRS = new Set([
+  'assets',
+  'libraries',
+  'runtime',
+  'webcache',
+  'downloads',
+  'logs',
+  'screenshots',
+  'saves',
+  'resourcepacks',
+  'shaderpacks',
+  'mods',
+  'config',
+  'versions',
+  'launcher_profiles',
+  'cache',
+  'accounts',
+  'quickplay',
+  'icons',
+]);
+
+function scoreServerJarPath(roamingRoot, jarPath, version) {
+  const dir = path.dirname(jarPath);
+  const rel = path.relative(roamingRoot, dir).toLowerCase();
+  let s = 0;
+  if (rel.includes(version.toLowerCase())) s += 10;
+  if (rel.includes('minecraft-server')) s += 5;
+  if (rel.includes('servers')) s += 3;
+  if (rel.includes('server')) s += 1;
+  return s;
+}
+
+function collectServerJars(roamingRoot, dir, version, depth, maxDepth, acc) {
+  if (depth > maxDepth || !fs.existsSync(dir)) return;
+  const jarPath = path.join(dir, 'server.jar');
+  if (fs.existsSync(jarPath)) {
+    acc.push({
+      jarPath,
+      score: scoreServerJarPath(roamingRoot, jarPath, version),
+    });
+  }
+  if (depth >= maxDepth) return;
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (SKIP_MINECRAFT_WALK_DIRS.has(e.name)) continue;
+    collectServerJars(roamingRoot, path.join(dir, e.name), version, depth + 1, maxDepth, acc);
+  }
+}
+
+/**
+ * Busca server.jar bajo la carpeta del cliente (.minecraft), como en TLauncher.
+ */
+export function findServerJarUnderMinecraftRoot(roamingRoot, version) {
+  const normalizedVersion = normalizeVersion(version);
+  const candidates = [
+    path.join(roamingRoot, 'minecraft-server', normalizedVersion, 'server.jar'),
+    path.join(roamingRoot, 'servers', normalizedVersion, 'server.jar'),
+    path.join(roamingRoot, normalizedVersion, 'server.jar'),
+    path.join(roamingRoot, 'server', 'server.jar'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  const acc = [];
+  collectServerJars(roamingRoot, roamingRoot, normalizedVersion, 0, 6, acc);
+  if (acc.length === 0) return null;
+  acc.sort((a, b) => b.score - a.score);
+  return acc[0].jarPath;
+}
+
+function resolveAutoPaths(config) {
+  const normalizedVersion = normalizeVersion(config.minecraftVersion);
+  const defaults = inferPathsFromVersion(normalizedVersion);
+  const roaming = getRoamingMinecraftRoot();
+  const resolved = {
+    ...config,
+    minecraftVersion: normalizedVersion,
+  };
+
+  const hasServerDir = Boolean(resolved.serverDirectory && String(resolved.serverDirectory).trim());
+  const hasServerJar = Boolean(resolved.serverJar && String(resolved.serverJar).trim());
+
+  if (!hasServerDir && !hasServerJar) {
+    resolved.serverDirectory = defaults.serverDirectory;
+    resolved.serverJar = defaults.serverJar;
+  } else if (!hasServerDir && hasServerJar) {
+    resolved.serverDirectory = path.dirname(resolved.serverJar);
+  } else if (hasServerDir && !hasServerJar) {
+    const dir = path.resolve(resolved.serverDirectory);
+    resolved.serverDirectory = dir;
+    const candidateJar = path.join(dir, 'server.jar');
+    if (fs.existsSync(candidateJar)) {
+      resolved.serverJar = candidateJar;
+    } else {
+      const found = findServerJarUnderMinecraftRoot(roaming, normalizedVersion);
+      if (found) {
+        resolved.serverJar = found;
+        resolved.serverDirectory = path.dirname(found);
+      } else {
+        resolved.serverJar = path.join(dir, 'server.jar');
+      }
+    }
+  }
+
+  if (resolved.serverJar) {
+    resolved.serverJar = path.resolve(resolved.serverJar);
+  }
+  if (resolved.serverDirectory) {
+    resolved.serverDirectory = path.resolve(resolved.serverDirectory);
+  }
+
+  if (resolved.serverJar && !fs.existsSync(resolved.serverJar)) {
+    const found = findServerJarUnderMinecraftRoot(roaming, normalizedVersion);
+    if (found) {
+      resolved.serverJar = path.resolve(found);
+      resolved.serverDirectory = path.dirname(resolved.serverJar);
+    }
+  }
+
+  if (resolved.serverDirectory && !resolved.serverJar) {
+    const candidateJar = path.join(resolved.serverDirectory, 'server.jar');
+    resolved.serverJar = fs.existsSync(candidateJar) ? candidateJar : path.resolve(defaults.serverJar);
+  }
+
+  if (!resolved.javaPath) {
+    resolved.javaPath = 'java';
+  }
+
+  return resolved;
+}
+
 function getEffectiveConfig(overrides = {}) {
   const stored = getConfig().minecraft || {};
-  const merged = { ...stored, ...overrides };
+  const merged = resolveAutoPaths({ ...stored, ...overrides });
 
   if (merged.serverJar) {
     merged.serverJar = path.resolve(merged.serverJar);
@@ -94,6 +262,53 @@ function parseStartupArgs(extraArgs = '') {
     .filter(Boolean);
 }
 
+function runProcess(command, args = [], options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      windowsHide: true,
+      ...options,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const timeoutMs = options.timeoutMs || 8000;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      reject(new Error('Timeout'));
+    }, timeoutMs);
+
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr?.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.once('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    });
+
+    child.once('exit', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve({
+        code,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+      });
+    });
+  });
+}
+
 function setStoppedState(code, signal) {
   appendLog(
     'system',
@@ -128,6 +343,74 @@ export function getMinecraftStatus() {
   };
 }
 
+export async function validateMinecraftConfig(overrides = {}) {
+  const config = getEffectiveConfig(overrides);
+  const issues = [];
+
+  const hasServerJar = Boolean(config.serverJar);
+  const serverJarExists = hasServerJar && fs.existsSync(config.serverJar);
+  const hasServerDirectory = Boolean(config.serverDirectory);
+  const serverDirectoryExists = hasServerDirectory && fs.existsSync(config.serverDirectory);
+  const eulaPath = hasServerDirectory ? path.join(config.serverDirectory, 'eula.txt') : null;
+  const eulaExists = Boolean(eulaPath && fs.existsSync(eulaPath));
+
+  const roamingRoot = getRoamingMinecraftRoot();
+  const suggestedDir = path.join(roamingRoot, 'minecraft-server', config.minecraftVersion || DEFAULT_VERSION);
+
+  if (!hasServerJar) {
+    issues.push('Falta la ruta del archivo .jar del servidor.');
+  } else if (!serverJarExists) {
+    issues.push(`No se encontró el .jar en ${config.serverJar}.`);
+    if (fs.existsSync(roamingRoot)) {
+      issues.push(
+        'TLauncher apunta a la carpeta del cliente (.minecraft). El servidor dedicado usa otro archivo: descarga `server.jar` oficial para tu versión y colócalo, por ejemplo, en: ' +
+          suggestedDir
+      );
+    }
+  }
+
+  if (!hasServerDirectory) {
+    issues.push('Falta la carpeta del servidor.');
+  } else if (!serverDirectoryExists) {
+    issues.push(`No se encontró la carpeta ${config.serverDirectory}.`);
+  }
+
+  if ((config.minMemoryMb || 0) > (config.maxMemoryMb || 0)) {
+    issues.push('La memoria mínima no puede ser mayor que la máxima.');
+  }
+
+  let javaOk = false;
+  let javaVersion = null;
+  let javaError = null;
+
+  try {
+    const javaResult = await runProcess(config.javaPath || 'java', ['-version']);
+    javaOk = javaResult.code === 0 || Boolean(javaResult.stderr || javaResult.stdout);
+    javaVersion = javaResult.stderr.split('\n')[0] || javaResult.stdout.split('\n')[0] || null;
+  } catch (error) {
+    javaError = error.message;
+    issues.push(`No se pudo ejecutar Java con "${config.javaPath || 'java'}".`);
+  }
+
+  return {
+    ok: issues.length === 0 && javaOk,
+    issues,
+    checks: {
+      javaOk,
+      javaVersion,
+      javaError,
+      hasServerJar,
+      serverJarExists,
+      hasServerDirectory,
+      serverDirectoryExists,
+      eulaExists,
+      autoAcceptEula: Boolean(config.autoAcceptEula),
+      address: `localhost:${config.port || 25565}`,
+    },
+    config,
+  };
+}
+
 export async function startMinecraftServer(overrides = {}) {
   if (minecraftProcess) {
     return getMinecraftStatus();
@@ -136,7 +419,7 @@ export async function startMinecraftServer(overrides = {}) {
   const config = getEffectiveConfig(overrides);
 
   if (!config.serverJar) {
-    throw new Error('Configura la ruta del archivo .jar del servidor de Minecraft');
+    throw new Error('No se pudo resolver la ruta del .jar del servidor de Minecraft');
   }
 
   if (!fs.existsSync(config.serverJar)) {
@@ -279,4 +562,15 @@ export async function sendMinecraftCommand(command) {
 
 export function getMinecraftEmitter() {
   return minecraftEmitter;
+}
+
+export function getSuggestedMinecraftPaths(version) {
+  const v = normalizeVersion(version);
+  const d = inferPathsFromVersion(v);
+  return {
+    minecraftVersion: v,
+    serverDirectory: d.serverDirectory,
+    serverJar: d.serverJar,
+    roamingMinecraftRoot: getRoamingMinecraftRoot(),
+  };
 }

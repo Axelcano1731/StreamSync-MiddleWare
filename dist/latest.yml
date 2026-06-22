@@ -1,8 +1,8 @@
 version: 1.0.0
 files:
   - url: StreamSync-Setup-1.0.0.exe
-    sha512: VDLMH3kmsvXK46ApyL6heupmwEYXSefdjIRisi4Fl9t2rUpLjdz6HQzyv1VdWc/Zb5QC7AmAzNs1KtXc6dMUsA==
-    size: 156213481
+    sha512: p/vJtaLWJx+MHqS/A88s+TcsxBq72ieYwUxsjP4S0RqwW+Xaif2Gu2IeYcIrfMT5KsMJJh0NcXI4CzD4dGY8EQ==
+    size: 84520873
 path: StreamSync-Setup-1.0.0.exe
-sha512: VDLMH3kmsvXK46ApyL6heupmwEYXSefdjIRisi4Fl9t2rUpLjdz6HQzyv1VdWc/Zb5QC7AmAzNs1KtXc6dMUsA==
-releaseDate: '2026-04-09T16:26:06.872Z'
+sha512: p/vJtaLWJx+MHqS/A88s+TcsxBq72ieYwUxsjP4S0RqwW+Xaif2Gu2IeYcIrfMT5KsMJJh0NcXI4CzD4dGY8EQ==
+releaseDate: '2026-05-25T01:04:03.124Z'

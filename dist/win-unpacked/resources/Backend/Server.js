@@ -11,12 +11,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DEFAULT_PORT = Number(process.env.PORT || 3000);
-const ALLOWED_ORIGINS = new Set([
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:4173',
-]);
-
 let appInstance = null;
 let ioInstance = null;
 let httpServer = null;
@@ -26,7 +20,13 @@ function isAllowedSocketOrigin(origin) {
     return true;
   }
 
-  return ALLOWED_ORIGINS.has(origin);
+  // Accept any localhost origin regardless of port
+  try {
+    const url = new URL(origin);
+    return url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
 }
 
 function createApp() {
@@ -68,10 +68,18 @@ export async function startBackendServer({ port = DEFAULT_PORT } = {}) {
 
   socketHandler(ioInstance);
 
+  let currentPort = port;
+
   await new Promise((resolve, reject) => {
     const onError = (error) => {
-      httpServer?.off('listening', onListening);
-      reject(error);
+      if (error.code === 'EADDRINUSE') {
+        console.log(`⚠️ Puerto ${currentPort} en uso, probando ${currentPort + 1}...`);
+        currentPort++;
+        httpServer.listen(currentPort);
+      } else {
+        httpServer?.off('listening', onListening);
+        reject(error);
+      }
     };
 
     const onListening = () => {
@@ -79,16 +87,16 @@ export async function startBackendServer({ port = DEFAULT_PORT } = {}) {
       resolve();
     };
 
-    httpServer.once('error', onError);
+    httpServer.on('error', onError);
     httpServer.once('listening', onListening);
-    httpServer.listen(port);
+    httpServer.listen(currentPort);
   });
 
-  console.log(`🚀 StreamSync Backend corriendo en http://localhost:${port}`);
-  console.log(`🎨 Overlay disponible en http://localhost:${port}/overlay`);
-  console.log(`🎵 Spotify API en http://localhost:${port}/api/spotify`);
+  console.log(`🚀 StreamSync Backend corriendo en http://localhost:${currentPort}`);
+  console.log(`🎨 Overlay disponible en http://localhost:${currentPort}/overlay`);
+  console.log(`🎵 Spotify API en http://localhost:${currentPort}/api/spotify`);
 
-  return { app: appInstance, server: httpServer, io: ioInstance, port };
+  return { app: appInstance, server: httpServer, io: ioInstance, port: currentPort };
 }
 
 export async function stopBackendServer() {

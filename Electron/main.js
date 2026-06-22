@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, session } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
@@ -21,8 +21,7 @@ async function startBackend() {
   const backendEntry = getResourcePath('Backend', 'Server.js');
   const backendModule = await import(pathToFileURL(backendEntry).href);
 
-  backendController = backendModule;
-  await backendModule.startBackendServer({ port: 3000 });
+  backendController = await backendModule.startBackendServer({ port: 3000 });
 }
 
 async function stopBackend() {
@@ -51,20 +50,35 @@ async function createWindow() {
     },
   });
 
-  if (isDev) {
-    await mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  } else {
-    await mainWindow.loadFile(getResourcePath('frontend-dist', 'index.html'));
-  }
+  // Register 'ready-to-show' BEFORE loading content so the event is never missed.
+  // Fallback timeout ensures the window shows even if the event somehow doesn't fire.
+  const showTimeout = setTimeout(() => {
+    if (mainWindow && !mainWindow.isVisible()) {
+      console.warn('⚠️ ready-to-show timeout — forcing window visible');
+      mainWindow.show();
+    }
+  }, 8000);
 
   mainWindow.once('ready-to-show', () => {
+    clearTimeout(showTimeout);
     mainWindow?.show();
   });
 
   mainWindow.on('closed', () => {
+    clearTimeout(showTimeout);
     mainWindow = null;
   });
+
+  const actualPort = backendController?.port || 3000;
+
+  if (isDev) {
+    await mainWindow.loadURL(`http://localhost:5173?backendPort=${actualPort}`);
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  } else {
+    await mainWindow.loadFile(getResourcePath('frontend-dist', 'index.html'), {
+      query: { backendPort: actualPort.toString() }
+    });
+  }
 }
 
 function setupAutoUpdater() {
@@ -124,13 +138,26 @@ function setupAutoUpdater() {
 async function initializeApp() {
   try {
     await startBackend();
+
+    const actualPort = backendController?.port;
+    if (actualPort && actualPort !== 3000) {
+      console.log(`🔌 Redirigiendo tráfico interno del puerto 3000 al ${actualPort}...`);
+      session.defaultSession.webRequest.onBeforeRequest(
+        { urls: ['http://localhost:3000/*', 'ws://localhost:3000/*'] },
+        (details, callback) => {
+          const newUrl = details.url.replace('localhost:3000', `localhost:${actualPort}`);
+          callback({ redirectURL: newUrl });
+        }
+      );
+    }
+
     await createWindow();
     setupAutoUpdater();
   } catch (error) {
     console.error('❌ No se pudo iniciar StreamSync Desktop:', error);
     dialog.showErrorBox(
       'Error al iniciar StreamSync',
-      `${error.message}\n\nRevisa que el frontend esté compilado y que el puerto 3000 esté libre.`
+      `${error.message}\n\nOcurrió un error al arrancar la aplicación.`
     );
     app.quit();
   }

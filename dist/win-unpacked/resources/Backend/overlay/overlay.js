@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const BACKEND_URL = 'http://localhost:3000';
+  const BACKEND_URL = window.location.origin;
   const overlaySocket = io(`${BACKEND_URL}/overlay`);
   const mainSocket = io(BACKEND_URL);
   const params = new URLSearchParams(window.location.search);

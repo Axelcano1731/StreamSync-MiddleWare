@@ -32,6 +32,10 @@ export function setClientId(clientId) {
   spotifyState.clientId = clientId;
 }
 
+export function setRedirectUri(uri) {
+  spotifyState.redirectUri = uri;
+}
+
 /**
  * Get the authorization URL for Spotify OAuth PKCE flow
  */

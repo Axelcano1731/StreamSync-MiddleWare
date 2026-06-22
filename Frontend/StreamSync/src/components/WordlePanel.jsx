@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 
-const WORDLE_URL = "http://localhost:3000/games/wordle/";
+const params = new URLSearchParams(window.location.search);
+const backendPort = params.get('backendPort') || '3000';
+const WORDLE_URL = `http://localhost:${backendPort}/games/wordle/`;
 
 export default function WordlePanel() {
   const [launched, setLaunched] = useState(false);

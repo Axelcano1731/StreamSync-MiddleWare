@@ -11,6 +11,51 @@ import {
 import { processEvent, resetGoalProgress } from "../services/eventEngine.js";
 import { trackEvent, startSession, endSession } from "../services/statsTracker.js";
 
+// Profile picture cache — persists across events so chat can use pics from gift/follow/member
+const profilePicCache = new Map();
+
+function findAvatarUrl(user) {
+  if (!user) return null;
+  const directFields = [
+    'profilePictureUrl', 'avatarMedium', 'avatarLarger', 'avatarThumb',
+    'avatarUrl', 'avatar', 'profilePicture', 'cover'
+  ];
+  for (const f of directFields) {
+    const val = user[f];
+    if (typeof val === 'string' && val.startsWith('http')) return val;
+    if (val && typeof val === 'object') {
+      if (Array.isArray(val.urlList) && val.urlList[0]) return val.urlList[0];
+      if (Array.isArray(val.url_list) && val.url_list[0]) return val.url_list[0];
+      if (typeof val.url === 'string' && val.url.startsWith('http')) return val.url;
+      if (Array.isArray(val) && typeof val[0] === 'string' && val[0].startsWith('http')) return val[0];
+    }
+  }
+  // Scan ALL user properties for any avatar-like URL
+  for (const [key, val] of Object.entries(user)) {
+    if (key.toLowerCase().includes('avatar') || key.toLowerCase().includes('pic') || key.toLowerCase().includes('photo')) {
+      if (typeof val === 'string' && val.startsWith('http')) return val;
+      if (val && typeof val === 'object') {
+        if (Array.isArray(val.urlList) && val.urlList[0]) return val.urlList[0];
+        if (Array.isArray(val.url_list) && val.url_list[0]) return val.url_list[0];
+        if (Array.isArray(val) && typeof val[0] === 'string') return val[0];
+      }
+    }
+  }
+  return null;
+}
+
+function cacheAndGetPic(user) {
+  if (!user) return null;
+  const userId = user.uniqueId;
+  const pic = findAvatarUrl(user);
+  if (pic && userId) {
+    profilePicCache.set(userId, pic);
+    return pic;
+  }
+  // Return cached if we have one
+  return userId ? (profilePicCache.get(userId) || null) : null;
+}
+
 // Reconnection settings
 let reconnectAttempts = 0;
 const MAX_RECONNECT = 5;
@@ -105,18 +150,25 @@ export async function connectToTikTok(username, io, isReconnect = false) {
     connection.on(WebcastEvent.CHAT, (data) => {
       const user = data.user?.uniqueId ?? "Usuario desconocido";
       const comment = (data.comment ?? "").replace(/\s+/g, " ").trim();
-      const profilePic = data.user?.profilePictureUrl ?? null;
+      const profilePic = cacheAndGetPic(data.user);
+
+      const badges = data.user?.badges || data.user?.badgeList || data.badges || [];
 
       const eventData = {
         uniqueId: user,
         comment,
         profilePic,
-        isModerator: data.user?.isModerator || false,
-        isSubscriber: data.user?.isSubscriber || false,
-        badges: data.user?.badges || [],
+        isModerator: data.user?.isModerator || data.isModerator || false,
+        isSubscriber: data.user?.isSubscriber || data.isSubscriber || false,
+        badges,
+        topFanLevel: data.user?.topFanLevel ?? data.topFanLevel ?? 0,
+        followRole: data.user?.followRole ?? data.followRole ?? 0,
+        teamMemberLevel: data.user?.teamMemberLevel ?? 0,
+        isFollower: data.user?.isFollower ?? false,
+        fansClub: data.user?.fansClub ?? null,
       };
 
-      console.log(`💬 [CHAT] ${user}: ${comment}`);
+      console.log(`💬 [CHAT] ${user}: ${comment} | pic=${profilePic ? 'YES' : 'NULL(cache:' + profilePicCache.size + ')'}`);
       io.emit("chat", eventData);
       trackEvent('chat', eventData);
       processEvent('chat', eventData);
@@ -140,7 +192,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
     // ====== FOLLOW ======
     connection.on(WebcastEvent.FOLLOW, (data) => {
       const user = data.user?.uniqueId ?? "Usuario desconocido";
-      const profilePic = data.user?.profilePictureUrl ?? null;
+      const profilePic = cacheAndGetPic(data.user);
       const eventData = { uniqueId: user, profilePic };
 
       console.log(`➕ [FOLLOW] ${user} ahora sigue al streamer`);
@@ -166,7 +218,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
         const giftId = data.giftId ?? data.gift?.giftId ?? data.gift?.id ?? data.gift_key;
         const repeatCount = data.repeatCount ?? 1;
         const userId = data.user?.uniqueId ?? "Usuario desconocido";
-        const profilePic = data.user?.profilePictureUrl ?? null;
+        const profilePic = cacheAndGetPic(data.user);
 
         const giftMap = getGiftMap();
         let meta = data.extendedGiftInfo || data.gift || (giftId ? giftMap.get(String(giftId)) : null);
@@ -201,7 +253,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
     // ====== MEMBER JOIN (new) ======
     connection.on(WebcastEvent.MEMBER, (data) => {
       const user = data.user?.uniqueId ?? "Usuario desconocido";
-      const profilePic = data.user?.profilePictureUrl ?? null;
+      const profilePic = cacheAndGetPic(data.user);
       const eventData = { uniqueId: user, profilePic, actionId: data.actionId };
 
       console.log(`👋 [JOIN] ${user} se unió al directo`);

@@ -69,7 +69,7 @@
     }
   },
   "tts": {
-    "enabled": true,
+    "enabled": false,
     "voice": null,
     "rate": 1.8,
     "pitch": 1,
@@ -148,13 +148,14 @@
     "items": []
   },
   "minecraft": {
+    "minecraftVersion": "1.21",
     "javaPath": "java",
-    "serverJar": "",
-    "serverDirectory": "",
+    "serverJar": "C:\\Minecraft\\1.21\\server.jar",
+    "serverDirectory": "C:\\Minecraft\\1.21",
     "minMemoryMb": 2048,
     "maxMemoryMb": 4096,
     "port": 25565,
-    "autoAcceptEula": false,
+    "autoAcceptEula": true,
     "startupArgs": ""
   }
 }

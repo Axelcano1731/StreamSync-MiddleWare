@@ -11,9 +11,9 @@
   "scripts": {
     "start": "electron .",
     "dev": "cross-env NODE_ENV=development electron .",
-    "pack": "electron-builder --dir",
-    "build:win": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis",
-    "release:win": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis --publish always"
+    "prebuild": "node scripts/prebuild.js",
+    "build:win": "npm run prebuild && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis",
+    "release:win": "npm run prebuild && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis --publish always"
   },
   "build": {
     "appId": "com.streamsync.desktop",
@@ -29,11 +29,10 @@
     ],
     "extraResources": [
       {
-        "from": "../Backend",
+        "from": ".build-staging/Backend",
         "to": "Backend",
         "filter": [
-          "**/*",
-          "!node_modules/**"
+          "**/*"
         ]
       },
       {
@@ -42,7 +41,12 @@
       },
       {
         "from": "../games",
-        "to": "games"
+        "to": "games",
+        "filter": [
+          "**/*",
+          "!**/generate_words.mjs",
+          "!**/replace_words.js"
+        ]
       }
     ],
     "asar": true,
@@ -79,7 +83,6 @@
     "electron-updater": "^6.6.2",
     "express": "^5.1.0",
     "socket.io": "^4.8.1",
-    "streamsync": "file:..",
     "tiktok-live-connector": "^2.0.7-beta1"
   },
   "devDependencies": {
