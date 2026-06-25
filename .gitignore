@@ -50,6 +50,11 @@ backend/.mypy_cache/
 backend/.env
 backend/.env.local
 
+# Estado de runtime generado por la app (se regenera solo desde los defaults).
+# No debe versionarse: ensucia el diff y crece con los audios en base64.
+Backend/data/alertConfig.json
+Backend/data/stickerSounds.json
+
 ########################################
 # Global Config / OS Files
 ########################################

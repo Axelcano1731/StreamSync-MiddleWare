@@ -18,6 +18,7 @@ import { VoiceSettings } from "./components/VoiceSettings";
 import WordlePanel from "./components/WordlePanel";
 import ChatPanel from "./components/ChatPanel";
 import StickerSoundsPanel from "./components/StickerSoundsPanel";
+import { StickerSoundsProvider } from "./context/StickerSoundsContext";
 
 const PAGE_TITLES = {
   dashboard: "Dashboard",
@@ -178,18 +179,20 @@ function App() {
   };
 
   return (
-    <div className="app-container">
-      <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
-      <div className="app-body">
-        <TopBar
-          status={status}
-          username={username}
-          disconnectFromTikTok={disconnectFromTikTok}
-          pageTitle={PAGE_TITLES[currentPage] || "StreamSync"}
-        />
-        {renderPage()}
+    <StickerSoundsProvider>
+      <div className="app-container">
+        <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
+        <div className="app-body">
+          <TopBar
+            status={status}
+            username={username}
+            disconnectFromTikTok={disconnectFromTikTok}
+            pageTitle={PAGE_TITLES[currentPage] || "StreamSync"}
+          />
+          {renderPage()}
+        </div>
       </div>
-    </div>
+    </StickerSoundsProvider>
   );
 }
 

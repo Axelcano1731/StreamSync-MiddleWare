@@ -30,6 +30,24 @@ function getGiftMap() {
   return giftMap; // Devuelve el mapa con la información de gifts
 }
 
+// Devuelve la lista de gifts disponibles normalizada para el frontend:
+// { id, name, image, diamondCount }. Ordenada por costo de diamantes.
+function getAvailableGiftsList() {
+  const list = [];
+  for (const g of giftMap.values()) {
+    const name = g?.name ?? null;
+    if (!name) continue;
+    list.push({
+      id: String(g?.id ?? g?.gift_id ?? g?.key ?? name),
+      name,
+      image: g?.image?.url_list?.[0] ?? g?.icon?.url_list?.[0] ?? null,
+      diamondCount: g?.diamond_count ?? g?.diamondCount ?? null,
+    });
+  }
+  list.sort((a, b) => (a.diamondCount ?? 0) - (b.diamondCount ?? 0));
+  return list;
+}
+
 function setConnection(newConnection, username) {
   // Establece una nueva conexión y guarda el usuario
   connection = newConnection;
@@ -51,6 +69,7 @@ export {
   refreshAvailableGifts,
   getConnection,
   getGiftMap,
+  getAvailableGiftsList,
   setConnection,
   disconnectConnection,
   WebcastEvent,

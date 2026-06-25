@@ -1,7 +1,6 @@
 const { app, BrowserWindow, dialog, session } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { autoUpdater } = require('electron-updater');
 
 let mainWindow = null;
 let backendController = null;
@@ -81,10 +80,13 @@ async function createWindow() {
   }
 }
 
-function setupAutoUpdater() {
+async function setupAutoUpdater() {
   if (isDev) {
     return;
   }
+
+  // Dynamic import so electron-updater is loaded after app is ready
+  const { autoUpdater } = await import('electron-updater');
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -152,7 +154,7 @@ async function initializeApp() {
     }
 
     await createWindow();
-    setupAutoUpdater();
+    await setupAutoUpdater();
   } catch (error) {
     console.error('❌ No se pudo iniciar StreamSync Desktop:', error);
     dialog.showErrorBox(

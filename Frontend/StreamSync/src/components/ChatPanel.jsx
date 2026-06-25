@@ -78,7 +78,22 @@ export default function ChatPanel({ events }) {
                   )}
                   <span className="chat-time">{formatTime(msg._time)}</span>
                 </div>
-                <span className="chat-text">{msg.comment}</span>
+                {msg.comment && <span className="chat-text">{msg.comment}</span>}
+                {Array.isArray(msg.stickers) && msg.stickers.length > 0 && (
+                  <div className="chat-stickers">
+                    {msg.stickers.map((st, si) =>
+                      st.emoteImage ? (
+                        <img
+                          key={si}
+                          className="chat-sticker-img"
+                          src={st.emoteImage}
+                          alt="sticker"
+                          loading="lazy"
+                        />
+                      ) : null
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))

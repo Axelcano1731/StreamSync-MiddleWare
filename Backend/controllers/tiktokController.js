@@ -15,6 +15,29 @@ import { getStickerSoundForGift } from "../services/stickerSoundService.js";
 // Profile picture cache — persists across events so chat can use pics from gift/follow/member
 const profilePicCache = new Map();
 
+// Dedupe CHAT.emotes ↔ evento EMOTE. TikTok normalmente manda los stickers
+// embebidos en el CHAT (data.emotes), pero algunas versiones también disparan
+// el evento EMOTE para el mismo sticker. Registramos cada emote ya emitido y
+// dejamos que el CHAT sea la fuente principal; EMOTE solo actúa como respaldo
+// cuando el CHAT no trajo el sticker.
+const emoteDedupe = new Map(); // `${user}|${key}` -> timestamp
+const EMOTE_DEDUPE_TTL = 4000;
+
+function markEmoteEmitted(user, key) {
+  const now = Date.now();
+  emoteDedupe.set(`${user}|${key}`, now);
+  if (emoteDedupe.size > 500) {
+    for (const [k, ts] of emoteDedupe) {
+      if (now - ts > EMOTE_DEDUPE_TTL) emoteDedupe.delete(k);
+    }
+  }
+}
+
+function wasEmoteRecentlyEmitted(user, key) {
+  const ts = emoteDedupe.get(`${user}|${key}`);
+  return ts != null && Date.now() - ts < EMOTE_DEDUPE_TTL;
+}
+
 function findAvatarUrl(user) {
   if (!user) return null;
   const directFields = [
@@ -155,10 +178,26 @@ export async function connectToTikTok(username, io, isReconnect = false) {
 
       const badges = data.user?.badges || data.user?.badgeList || data.badges || [];
 
+      // Stickers de chat: TikTok los envía EMBEBIDOS dentro del mensaje de chat
+      // (data.emotes[].emote), no en el evento EMOTE. Cada uno tiene emoteId + imageUrl.
+      const stickers = Array.isArray(data.emotes)
+        ? data.emotes
+            .map((e) => ({
+              emoteId: e?.emote?.emoteId ? String(e.emote.emoteId) : null,
+              emoteImage:
+                e?.emote?.image?.imageUrl ??
+                e?.emote?.image?.url_list?.[0] ??
+                e?.emote?.image?.mUrls?.[0] ??
+                null,
+            }))
+            .filter((s) => s.emoteId || s.emoteImage)
+        : [];
+
       const eventData = {
         uniqueId: user,
         comment,
         profilePic,
+        stickers,
         isModerator: data.user?.isModerator || data.isModerator || false,
         isSubscriber: data.user?.isSubscriber || data.isSubscriber || false,
         badges,
@@ -169,10 +208,42 @@ export async function connectToTikTok(username, io, isReconnect = false) {
         fansClub: data.user?.fansClub ?? null,
       };
 
-      console.log(`💬 [CHAT] ${user}: ${comment} | pic=${profilePic ? 'YES' : 'NULL(cache:' + profilePicCache.size + ')'}`);
+      const stickerTag = stickers.length ? ` [+${stickers.length} sticker]` : '';
+      console.log(`💬 [CHAT] ${user}: ${comment}${stickerTag} | pic=${profilePic ? 'YES' : 'NULL(cache:' + profilePicCache.size + ')'}`);
       io.emit("chat", eventData);
       trackEvent('chat', eventData);
       processEvent('chat', eventData);
+
+      // Anti-spam: un mensaje puede traer muchas copias del mismo sticker.
+      // Disparamos el panel y el sonido SOLO una vez por sticker distinto por mensaje.
+      const seenStickers = new Set();
+      for (const st of stickers) {
+        const key = st.emoteId || st.emoteImage;
+        if (seenStickers.has(key)) continue;
+        seenStickers.add(key);
+
+        io.emit("emote", {
+          uniqueId: user,
+          emoteId: key,
+          emoteImage: st.emoteImage,
+          profilePic,
+        });
+
+        const stickerSound = getStickerSoundForGift(key);
+        if (stickerSound) {
+          io.emit("stickerSound", {
+            giftName: key,
+            soundData: stickerSound.soundData,
+            volume: stickerSound.volume,
+            uniqueId: user,
+            profilePic,
+          });
+        }
+
+        // El CHAT es la fuente principal: marca el sticker para que el evento
+        // EMOTE no lo vuelva a disparar si llega justo después.
+        markEmoteEmitted(user, key);
+      }
     });
 
     // ====== LIKE ======
@@ -264,6 +335,60 @@ export async function connectToTikTok(username, io, isReconnect = false) {
         }
       } catch (err) {
         console.error("Error procesando GIFT:", err);
+      }
+    });
+
+    // ====== EMOTE (stickers de chat / suscripción) ======
+    connection.on(WebcastEvent.EMOTE, (data) => {
+      try {
+        const userId = data.user?.uniqueId ?? "Usuario desconocido";
+        const profilePic = cacheAndGetPic(data.user);
+
+        // Algunas versiones entregan emoteList[], otras un único emote
+        const emotes = data.emoteList ?? (data.emote ? [data.emote] : []);
+
+        for (const emote of emotes) {
+          const emoteId = emote?.emoteId ?? emote?.id ?? emote?.uuid ?? null;
+          const img = emote?.image ?? emote?.emoteImage ?? null;
+          const emoteImage =
+            img?.url_list?.[0] ?? img?.urlList?.[0] ?? img?.url ?? null;
+
+          if (!emoteId && !emoteImage) continue;
+
+          const key = emoteId ? String(emoteId) : emoteImage;
+
+          // Respaldo: si el CHAT ya emitió este sticker hace un instante, no lo
+          // dupliques (evita contar doble en la galería y sonar dos veces).
+          if (wasEmoteRecentlyEmitted(userId, key)) continue;
+
+          const eventData = {
+            uniqueId: userId,
+            emoteId: key,
+            emoteImage,
+            profilePic,
+          };
+
+          console.log(`🎟️ [EMOTE] ${userId} → sticker ${eventData.emoteId?.slice(0, 12)}…`);
+          io.emit("emote", eventData);
+          trackEvent('emote', eventData);
+          processEvent('emote', eventData);
+
+          // Reproducir sonido si este sticker tiene uno asignado (key = emoteId)
+          const stickerSound = getStickerSoundForGift(eventData.emoteId);
+          if (stickerSound) {
+            io.emit("stickerSound", {
+              giftName: eventData.emoteId,
+              soundData: stickerSound.soundData,
+              volume: stickerSound.volume,
+              uniqueId: userId,
+              profilePic,
+            });
+          }
+
+          markEmoteEmitted(userId, key);
+        }
+      } catch (err) {
+        console.error("Error procesando EMOTE:", err);
       }
     });
 
