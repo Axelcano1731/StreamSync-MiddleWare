@@ -7,6 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import socketHandler from './socket/socketHandler.js';
 import spotifyRoutes from './routes/spotifyRoutes.js';
 import stickerSoundsRoutes from './routes/stickerSoundsRoutes.js';
+import { processEvent } from './services/eventEngine.js';
+import { controlBattle } from './services/avatarBattleService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +44,42 @@ function createApp() {
 
   app.use('/api/spotify', spotifyRoutes);
   app.use('/api/sticker-sounds', stickerSoundsRoutes);
+
+  // Rutas de prueba locales (simular eventos sin live). Desactivar en produccion.
+  if (process.env.NODE_ENV !== 'production') {
+    app.get('/test/gift', (req, res) => {
+      const diamonds = parseInt(req.query.d || '5', 10);
+      const eventData = {
+        uniqueId: req.query.u || 'tester',
+        giftName: req.query.name || 'rose',
+        repeatCount: Math.max(1, parseInt(req.query.c || '1', 10) || 1),
+        diamondCount: Number.isFinite(diamonds) ? diamonds : 5,
+        giftImage: null,
+        profilePic: null,
+        giftId: req.query.id || null,
+        giftType: 0,
+        repeatEnd: 1,
+      };
+      if (ioInstance) ioInstance.emit('gift', eventData);
+      processEvent('gift', eventData);
+      res.json({ ok: true, simulated: eventData });
+    });
+
+    app.get('/test/like', (req, res) => {
+      const eventData = {
+        uniqueId: req.query.u || 'tester',
+        likeCount: Math.max(1, parseInt(req.query.c || '30', 10) || 1),
+      };
+      if (ioInstance) ioInstance.emit('like', eventData);
+      processEvent('like', eventData);
+      res.json({ ok: true, simulated: eventData });
+    });
+
+    app.get('/test/battle', (req, res) => {
+      controlBattle(req.query.action || 'reset');
+      res.json({ ok: true, action: req.query.action || 'reset' });
+    });
+  }
 
   return app;
 }

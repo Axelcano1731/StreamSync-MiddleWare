@@ -240,6 +240,10 @@ export async function connectToTikTok(username, io, isReconnect = false) {
           diamondCount: cost,
           giftImage,
           profilePic,
+          // Campos de streak para deduplicar combos aguas abajo (Avatar Battle).
+          giftId: giftId ?? null,
+          giftType: data.giftType ?? null,
+          repeatEnd: data.repeatEnd ?? null,
         };
 
         console.log(`🎁 [GIFT] ${userId} → ${repeatCount}× ${name} • ${cost}💎`);
