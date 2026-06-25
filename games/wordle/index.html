@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamSync Wordle — En Vivo</title>
+  <link rel="stylesheet" href="wordle.css" />
+</head>
+<body>
+  <div class="game-container">
+    <!-- Header -->
+    <header class="game-header">
+      <div class="game-logo">
+        <span class="logo-icon">🟩</span>
+        <h1>StreamWordle</h1>
+      </div>
+      <div class="game-status">
+        <div class="word-pool-count">
+          <span id="pool-count">0</span> palabras
+        </div>
+        <div class="connection-dot" id="connection-dot"></div>
+      </div>
+    </header>
+
+    <!-- Game Mode Switcher (Streamer / Viewers) -->
+    <div class="game-mode-switcher">
+      <button class="game-mode-btn active" id="gmode-streamer">🎮 Streamer</button>
+      <button class="game-mode-btn" id="gmode-viewers">👥 Viewers</button>
+    </div>
+
+    <!-- Sub-mode: Difficulty (Streamer) -->
+    <div class="sub-mode-bar" id="sub-mode-streamer">
+      <button class="mode-btn active" id="mode-easy">😊 Fácil</button>
+      <button class="mode-btn" id="mode-hardcore">💀 Hardcore</button>
+      <span class="mode-label" id="mode-label">😊 FÁCIL</span>
+    </div>
+
+    <!-- Sub-mode: Viewer Filter (Viewers) -->
+    <div class="sub-mode-bar hidden" id="sub-mode-viewers">
+      <button class="filter-btn active" data-filter="all">🌐 Todos</button>
+      <button class="filter-btn" data-filter="admins">👑 Admins</button>
+      <button class="filter-btn" data-filter="subscribers">💎 Subs</button>
+      <button class="filter-btn" data-filter="quiereme">💖 Quiéreme</button>
+      <button class="filter-btn" data-filter="rosa_o_quiereme">🌹 Rosa/Quiéreme</button>
+      <div class="difficulty-mini" id="viewer-difficulty">
+        <button class="diff-mini-btn active" data-diff="easy">😊</button>
+        <button class="diff-mini-btn" data-diff="hardcore">💀</button>
+      </div>
+      <button class="mode-btn" id="btn-give-up-viewers" style="margin-left: auto; background-color: #ff4757; color: white;">🏳️ Rendirse</button>
+    </div>
+
+    <!-- Streak Bar -->
+    <div class="streak-bar">
+      <div class="streak-item">
+        <span class="streak-value fire" id="streak-current">0</span>
+        <span class="streak-label">🔥 Racha</span>
+      </div>
+      <div class="streak-item">
+        <span class="streak-value" id="streak-best">0</span>
+        <span class="streak-label">⭐ Mejor</span>
+      </div>
+      <div class="streak-item">
+        <span class="streak-value green" id="streak-wins">0</span>
+        <span class="streak-label">✅ Victorias</span>
+      </div>
+      <div class="streak-item">
+        <span class="streak-value red" id="streak-losses">0</span>
+        <span class="streak-label">❌ Derrotas</span>
+      </div>
+    </div>
+
+    <!-- Instructions -->
+    <div class="instructions-banner" id="instructions-banner">
+      <p>⌨️ Usa el <strong>teclado</strong> para jugar · Tildes y Ñ permitidas</p>
+    </div>
+
+    <!-- Viewer Card (Viewers mode) -->
+    <div class="viewer-card hidden" id="viewer-card">
+      <img src="" alt="" class="viewer-avatar hidden" id="viewer-avatar" crossorigin="anonymous" referrerpolicy="no-referrer">
+      <div class="viewer-avatar-placeholder" id="viewer-avatar-placeholder">?</div>
+      <div class="viewer-info">
+        <span class="viewer-name" id="viewer-name">Esperando jugador...</span>
+        <span class="viewer-status" id="viewer-status">Envía una palabra de 5 letras</span>
+      </div>
+    </div>
+
+    <!-- Board -->
+    <div class="board" id="board"></div>
+
+    <!-- Keyboard (visible only in Streamer mode) -->
+    <div class="keyboard" id="keyboard"></div>
+
+    <!-- Modal -->
+    <div class="modal hidden" id="modal">
+      <div class="modal-content">
+        <div class="modal-icon" id="modal-icon">🎉</div>
+        <h2 id="modal-title">¡Ganaste!</h2>
+        <p>La palabra era: <strong id="modal-word"></strong></p>
+        <p id="modal-guesser" class="modal-guesser"></p>
+        <div class="modal-stats">
+          <div class="modal-stat">
+            <span class="modal-stat-value" id="stat-attempts">0</span>
+            <span class="modal-stat-label">Intentos</span>
+          </div>
+          <div class="modal-stat">
+            <span class="modal-stat-value fire" id="stat-streak">0</span>
+            <span class="modal-stat-label">🔥 Racha</span>
+          </div>
+          <div class="modal-stat">
+            <span class="modal-stat-value" id="stat-best">0</span>
+            <span class="modal-stat-label">⭐ Mejor</span>
+          </div>
+          <div class="modal-stat">
+            <span class="modal-stat-value" id="stat-players">0</span>
+            <span class="modal-stat-label">Jugadores</span>
+          </div>
+        </div>
+        <button class="modal-btn" id="modal-btn">Nueva Partida 🔄</button>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast hidden" id="toast"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="spanish_words.js"></script>
+  <script src="wordle.js"></script>
+</body>
+</html>

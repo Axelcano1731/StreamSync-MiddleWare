@@ -2,7 +2,9 @@
 import React, { useState, useEffect } from "react";
 import socket from "../services/socketService";
 
-const API_BASE = "http://localhost:3000/api/spotify";
+const params = new URLSearchParams(window.location.search);
+const backendPort = params.get('backendPort') || '3000';
+const API_BASE = `http://localhost:${backendPort}/api/spotify`;
 
 export default function SpotifyPanel() {
   const [clientId, setClientId] = useState(
@@ -134,7 +136,7 @@ export default function SpotifyPanel() {
                   borderRadius: 4,
                 }}
               >
-                http://localhost:3000/api/spotify/callback
+                {API_BASE}/callback
               </code>{" "}
               como Redirect URI.
             </p>

@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  const socket = io('http://localhost:3000');
+  const socket = io();
   const MAX_ITEMS = 30;
   const events = [];
 

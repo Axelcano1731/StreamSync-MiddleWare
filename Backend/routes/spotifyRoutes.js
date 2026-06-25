@@ -9,6 +9,7 @@ import {
   togglePlayback,
   getSpotifyStatus,
   disconnectSpotify,
+  setRedirectUri,
 } from '../services/spotifyService.js';
 
 const router = express.Router();
@@ -22,6 +23,9 @@ router.get('/login', async (req, res) => {
   if (!clientId) {
     return res.status(400).json({ error: 'clientId is required' });
   }
+
+  const host = req.get('host');
+  setRedirectUri(`http://${host}/api/spotify/callback`);
 
   try {
     const authUrl = await getAuthUrl(clientId);

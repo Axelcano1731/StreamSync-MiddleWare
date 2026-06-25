@@ -100,11 +100,28 @@ El Wordle interactivo para el chat se comunica a través del sistema, y el Backe
 ¡Listo! El juego cargará y comenzará a capturar las palabras de 5 letras que los usuarios escriban en el chat de tu directo en TikTok.
 
 ### Opcional: Versión de Escritorio (Electron)
-Si prefieres no usar el navegador para el panel de control, puedes abrirlo como una app de escritorio nativa usando Electron:
+Si prefieres no usar el navegador para el panel de control, puedes abrirlo como una app de escritorio nativa usando Electron.
+
+**Para modo desarrollo:**
 ```bash
 cd Electron
 npm run dev
 ```
+
+**Para Empaquetar / Construir la App (Windows):**
+Si estás en Windows y utilizas PowerShell, comandos combinados con `&&` pueden dar error. Para construir y empaquetar la aplicación correctamente sin fallos, ejecuta los siguientes pasos uno por uno en la consola, desde la raíz del proyecto:
+
+1. **Construir el Frontend:**
+   ```powershell
+   npm run build --prefix Frontend/StreamSync
+   ```
+
+2. **Empaquetar la aplicación con Electron:**
+   ```powershell
+   npm run build:win --prefix Electron
+   ```
+
+Una vez finalizado, encontrarás el instalador (`StreamSync-Setup-1.0.0.exe`) dentro de la carpeta `dist` en la raíz del proyecto.
 
 ---
 
