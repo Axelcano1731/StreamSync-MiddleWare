@@ -1,0 +1,9 @@
+name: StreamSyncBox
+version: 1.0.0
+author: StreamSync
+api-version: '1.21'
+main: com.streamsync.box.StreamSyncBox
+commands:
+  bedrock:
+    description: Caja de regalos controlada por StreamSync (reemplazo libre del plugin S2E)
+    usage: /bedrock <create|fill|clear|delete|tp|tnt|randomtnt|supertnt|glass_prison|glass|wood|rock|fireworks|timer>

@@ -15,6 +15,7 @@ import {
   getSuggestedMinecraftPaths,
 } from '../services/minecraftServerService.js';
 import { initAvatarBattle, controlBattle } from '../services/avatarBattleService.js';
+import { initMinecraftActions } from '../services/minecraftActionsService.js';
 
 function emitConfig(io, config) {
   io.emit('alertConfig', config);
@@ -35,6 +36,7 @@ function resolveCallback(arg1, arg2) {
 export default function socketHandler(io) {
   initEngine(io);
   initAvatarBattle(io);
+  initMinecraftActions(io);
   loadConfig();
   startSpotifyBroadcast();
 

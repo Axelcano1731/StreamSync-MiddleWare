@@ -1,0 +1,5 @@
+-cp
+C:\\Users\\Usuario\\AppData\\Roaming\\.minecraft\\minecraftServer\\libraries\\io\\papermc\\paper\\paper-api\\1.21-R0.1-SNAPSHOT\\paper-api-1.21-R0.1-SNAPSHOT.jar;C:\\Users\\Usuario\\AppData\\Roaming\\.minecraft\\minecraftServer\\libraries\\net\\kyori\\adventure-api\\4.17.0\\adventure-api-4.17.0.jar
+-d
+c:\\Users\\Usuario\\Desktop\\GITHUB\\StreamSync-MiddleWare\\minecraft-plugin\\StreamSyncBox\\build\\classes
+C:\\Users\\Usuario\\Desktop\\GITHUB\\StreamSync-MiddleWare\\minecraft-plugin\\StreamSyncBox\\src\\com\\streamsync\\box\\StreamSyncBox.java

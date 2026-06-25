@@ -16,6 +16,25 @@ function isLegacyAutoPath(jar, dir) {
   return j.includes("C:\\Minecraft") || d.includes("C:\\Minecraft");
 }
 
+function normalizeActions(a) {
+  return {
+    enabled: a?.enabled !== false,
+    rules: Array.isArray(a?.rules) ? a.rules : [],
+  };
+}
+
+const BEDROCK_BUTTONS = [
+  { label: "🧱 Llenar", sub: "fill" },
+  { label: "🚀 Teleport", sub: "tp" },
+  { label: "🔷 Paredes cristal", sub: "glass" },
+  { label: "🪵 Paredes madera", sub: "wood" },
+  { label: "⬛ Bedrock", sub: "rock" },
+  { label: "🎆 Fuegos", sub: "fireworks" },
+  { label: "🧹 Limpiar", sub: "clear" },
+  { label: "💣 TNT random", sub: "randomtnt" },
+  { label: "🗑️ Borrar caja", sub: "delete", danger: true },
+];
+
 function sanitizeMinecraftConfig(config) {
   const safeVersion = MINECRAFT_VERSION_OPTIONS.includes(config.minecraftVersion)
     ? config.minecraftVersion
@@ -61,6 +80,12 @@ export default function MinecraftPanel() {
   const [isValidating, setIsValidating] = useState(false);
   const pathsManualRef = useRef(false);
 
+  // Preparación de partida (OP, caja BedrockBox) y reglas regalo→comando.
+  const [opName, setOpName] = useState(() => localStorage.getItem("mcOpName") || "");
+  const [box, setBox] = useState({ size: "", height: "", timer: "" });
+  const [actions, setActions] = useState({ enabled: true, rules: [] });
+  const [actionsMsg, setActionsMsg] = useState("");
+
   useEffect(() => {
     if (pathsManualRef.current) return;
     const empty = !String(config.serverJar || "").trim() && !String(config.serverDirectory || "").trim();
@@ -83,6 +108,9 @@ export default function MinecraftPanel() {
       if (cfg?.minecraft) {
         setConfig((prev) => ({ ...prev, ...cfg.minecraft }));
       }
+      if (cfg?.minecraftActions) {
+        setActions(normalizeActions(cfg.minecraftActions));
+      }
     });
 
     socket.emit("getMinecraftStatus", (status) => {
@@ -95,6 +123,9 @@ export default function MinecraftPanel() {
     const handleConfig = (cfg) => {
       if (cfg?.minecraft) {
         setConfig((prev) => ({ ...prev, ...cfg.minecraft }));
+      }
+      if (cfg?.minecraftActions) {
+        setActions(normalizeActions(cfg.minecraftActions));
       }
     };
 
@@ -196,6 +227,84 @@ export default function MinecraftPanel() {
         setMinecraftCommand("");
       }
     });
+  };
+
+  const isRunning = !!minecraftStatus?.isRunning;
+  const OVERLAY_URL = "http://localhost:3000/overlay/minecraft-gifts-overlay.html";
+
+  // ── OP / modo de juego ──
+  const makeOp = () => {
+    const name = opName.trim();
+    if (!name) {
+      setMessage("Escribe tu nombre de Minecraft para hacerte OP.");
+      return;
+    }
+    localStorage.setItem("mcOpName", name);
+    sendCommand(`op ${name}`);
+  };
+  const removeOp = () => {
+    const name = opName.trim();
+    if (name) sendCommand(`deop ${name}`);
+  };
+  const goCreative = () => {
+    const name = opName.trim();
+    if (name) sendCommand(`gamemode creative ${name}`);
+  };
+
+  // ── Caja BedrockBox ──
+  const runBedrock = (sub) => sendCommand(`bedrock ${sub}`);
+  const createBox = () => {
+    const s = parseInt(box.size, 10);
+    const h = parseInt(box.height, 10);
+    if (s >= 3 && h >= 9 && h <= 21) runBedrock(`create ${s} ${h}`);
+    else runBedrock("create");
+  };
+  const applyTimer = () => {
+    const t = parseInt(box.timer, 10);
+    if (t > 0) runBedrock(`timer ${t}`);
+  };
+
+  // ── Reglas regalo → comando ──
+  const updateRule = (i, patch) =>
+    setActions((prev) => ({
+      ...prev,
+      rules: prev.rules.map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
+    }));
+  const removeRule = (i) =>
+    setActions((prev) => ({ ...prev, rules: prev.rules.filter((_, idx) => idx !== i) }));
+  const addRule = () =>
+    setActions((prev) => ({
+      ...prev,
+      rules: [
+        ...prev.rules,
+        { event: "gift", giftName: "", command: "", enabled: true, minDiamonds: 0, repeatPerGift: false, maxRepeat: 10 },
+      ],
+    }));
+  const saveActions = () => {
+    const clean = {
+      enabled: actions.enabled,
+      rules: actions.rules
+        .map((r) => ({
+          event: "gift",
+          giftName: (r.giftName || "").trim(),
+          command: (r.command || "").trim(),
+          enabled: r.enabled !== false,
+          minDiamonds: Number(r.minDiamonds) || 0,
+          repeatPerGift: !!r.repeatPerGift,
+          maxRepeat: Number(r.maxRepeat) || 10,
+        }))
+        .filter((r) => r.command),
+    };
+    socket.emit("updateAlertConfig", { section: "minecraftActions", config: clean });
+    setActions(clean);
+    setActionsMsg("Reglas guardadas. El overlay se actualizó automáticamente.");
+    setTimeout(() => setActionsMsg(""), 3500);
+  };
+
+  const copyOverlay = () => {
+    navigator.clipboard?.writeText(OVERLAY_URL).catch(() => {});
+    setActionsMsg("URL del overlay copiada.");
+    setTimeout(() => setActionsMsg(""), 2500);
   };
 
   return (
@@ -463,6 +572,249 @@ export default function MinecraftPanel() {
             </div>
           )}
         </div>
+      </div>
+
+      {!isRunning ? (
+        <div className="minecraft-info-card">
+          ⚠️ Inicia el servidor para usar los controles de OP, la caja y probar
+          los regalos.
+        </div>
+      ) : null}
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: 20,
+        }}
+      >
+        {/* ── 1 · Permisos (OP) ── */}
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <div className="panel-title">1 · Hazte OP</div>
+              <div className="panel-subtitle">
+                Necesario para usar /bedrock y crear la caja
+              </div>
+            </div>
+          </div>
+
+          <div className="input-group" style={{ marginBottom: 12 }}>
+            <label>Tu nombre de Minecraft</label>
+            <input
+              className="input-field"
+              value={opName}
+              onChange={(e) => setOpName(e.target.value)}
+              placeholder="Ej: Axel123"
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn btn-primary" onClick={makeOp} disabled={!isRunning || !opName.trim()}>
+              👑 Hazte OP
+            </button>
+            <button className="btn" onClick={goCreative} disabled={!isRunning || !opName.trim()}>
+              🎨 Modo creativo
+            </button>
+            <button className="btn btn-danger" onClick={removeOp} disabled={!isRunning || !opName.trim()}>
+              Quitar OP
+            </button>
+          </div>
+        </div>
+
+        {/* ── 2 · Caja BedrockBox ── */}
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <div className="panel-title">2 · Caja BedrockBox</div>
+              <div className="panel-subtitle">
+                Móntala donde estés parado en el juego
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
+            <div className="input-group" style={{ marginBottom: 0, flex: "1 1 90px" }}>
+              <label>Tamaño (mín 3)</label>
+              <input
+                className="input-field"
+                type="number"
+                value={box.size}
+                onChange={(e) => setBox((p) => ({ ...p, size: e.target.value }))}
+                placeholder="5"
+              />
+            </div>
+            <div className="input-group" style={{ marginBottom: 0, flex: "1 1 90px" }}>
+              <label>Altura (9–21)</label>
+              <input
+                className="input-field"
+                type="number"
+                value={box.height}
+                onChange={(e) => setBox((p) => ({ ...p, height: e.target.value }))}
+                placeholder="12"
+              />
+            </div>
+            <button className="btn btn-primary" onClick={createBox} disabled={!isRunning}>
+              📦 Crear caja
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {BEDROCK_BUTTONS.map((b) => (
+              <button
+                key={b.sub}
+                className={`btn ${b.danger ? "btn-danger" : ""}`}
+                onClick={() => runBedrock(b.sub)}
+                disabled={!isRunning}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <div className="input-group" style={{ marginBottom: 0, flex: 1 }}>
+              <label>Timer para ganar (segundos)</label>
+              <input
+                className="input-field"
+                type="number"
+                value={box.timer}
+                onChange={(e) => setBox((p) => ({ ...p, timer: e.target.value }))}
+                placeholder="60"
+              />
+            </div>
+            <button className="btn" onClick={applyTimer} disabled={!isRunning || !box.timer}>
+              ⏱️ Aplicar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3 · Regalos → Comandos ── */}
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <div className="panel-title">3 · Regalos → Comandos</div>
+            <div className="panel-subtitle">
+              Qué comando dispara cada regalo de TikTok en el servidor
+            </div>
+          </div>
+          <label className="toggle" title="Activar/desactivar todas las acciones">
+            <input
+              type="checkbox"
+              checked={actions.enabled}
+              onChange={(e) => setActions((p) => ({ ...p, enabled: e.target.checked }))}
+            />
+            <span className="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div style={{ display: "grid", gap: 12 }}>
+          {actions.rules.length === 0 ? (
+            <div className="empty-state" style={{ padding: 18 }}>
+              <div className="empty-state-text">
+                Aún no hay reglas. Añade una para empezar.
+              </div>
+            </div>
+          ) : (
+            actions.rules.map((rule, i) => (
+              <div
+                key={i}
+                style={{
+                  border: "1px solid rgba(255,255,255,.1)",
+                  borderRadius: 12,
+                  padding: 12,
+                  opacity: rule.enabled === false ? 0.55 : 1,
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                  <label className="toggle" style={{ flex: "0 0 auto" }}>
+                    <input
+                      type="checkbox"
+                      checked={rule.enabled !== false}
+                      onChange={(e) => updateRule(i, { enabled: e.target.checked })}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
+                  <input
+                    className="input-field"
+                    style={{ flex: 1 }}
+                    value={rule.giftName || ""}
+                    onChange={(e) => updateRule(i, { giftName: e.target.value })}
+                    placeholder="Regalo (ej: Rose). Vacío = cualquiera"
+                  />
+                  <button className="btn btn-danger" onClick={() => removeRule(i)} title="Eliminar regla">
+                    ✕
+                  </button>
+                </div>
+
+                <input
+                  className="input-field"
+                  style={{ marginBottom: 8, fontFamily: "Consolas, monospace" }}
+                  value={rule.command || ""}
+                  onChange={(e) => updateRule(i, { command: e.target.value })}
+                  placeholder="Comando (ej: bedrock tnt {user})"
+                />
+
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <div className="input-group" style={{ marginBottom: 0, flex: "1 1 110px" }}>
+                    <label>Mínimo 💎</label>
+                    <input
+                      className="input-field"
+                      type="number"
+                      value={rule.minDiamonds ?? 0}
+                      onChange={(e) => updateRule(i, { minDiamonds: e.target.value })}
+                    />
+                  </div>
+                  <label className="config-row" style={{ gap: 8, marginBottom: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!rule.repeatPerGift}
+                      onChange={(e) => updateRule(i, { repeatPerGift: e.target.checked })}
+                    />
+                    <span className="config-label">Repetir por cantidad</span>
+                  </label>
+                  {rule.repeatPerGift ? (
+                    <div className="input-group" style={{ marginBottom: 0, flex: "1 1 90px" }}>
+                      <label>Máx repeticiones</label>
+                      <input
+                        className="input-field"
+                        type="number"
+                        value={rule.maxRepeat ?? 10}
+                        onChange={(e) => updateRule(i, { maxRepeat: e.target.value })}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+          <button className="btn" onClick={addRule}>
+            ➕ Añadir regla
+          </button>
+          <button className="btn btn-primary" onClick={saveActions}>
+            💾 Guardar reglas
+          </button>
+        </div>
+
+        <div className="minecraft-info-card" style={{ marginTop: 16 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>🎬 Overlay para OBS</div>
+          <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 8 }}>
+            Añádelo como <b>Browser Source</b> para mostrar en pantalla los regalos
+            y cuándo se disparan:
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="input-field" readOnly value={OVERLAY_URL} style={{ flex: 1 }} />
+            <button className="btn" onClick={copyOverlay}>📋 Copiar</button>
+          </div>
+        </div>
+
+        {actionsMsg ? (
+          <div className="minecraft-validation-ok" style={{ marginTop: 12 }}>{actionsMsg}</div>
+        ) : null}
       </div>
 
       <div className="panel">

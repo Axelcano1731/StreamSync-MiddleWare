@@ -64,35 +64,87 @@ const SKIP_MINECRAFT_WALK_DIRS = new Set([
   'shaderpacks',
   'mods',
   'config',
+  'defaultconfigs',
   'versions',
   'launcher_profiles',
   'cache',
   'accounts',
   'quickplay',
   'icons',
+  'plugins',
+  'backup',
+  'crash-reports',
+  'server-resource-packs',
+  'native',
+  'bin',
 ]);
 
-function scoreServerJarPath(roamingRoot, jarPath, version) {
+function shouldSkipWalkDir(name) {
+  const lower = name.toLowerCase();
+  if (SKIP_MINECRAFT_WALK_DIRS.has(lower)) return true;
+  if (lower.startsWith('.')) return true; // .paper-remapped, .fabric, etc.
+  if (lower.startsWith('world')) return true; // world, world_nether, world_oneblock...
+  if (lower.startsWith('jdk') || lower.startsWith('jre')) return true;
+  return false;
+}
+
+// Nombres típicos del .jar de arranque de un servidor (vanilla y forks).
+// Los .jar de plugins/mods NO matchean y además viven en carpetas que saltamos.
+const SERVER_JAR_PATTERNS = [
+  { re: /^server\.jar$/i, score: 100 },
+  { re: /^(paper|purpur|folia|pufferfish)[-_].*\.jar$/i, score: 90 },
+  { re: /^(spigot|craftbukkit)[-_].*\.jar$/i, score: 85 },
+  { re: /^fabric-server[-_].*\.jar$/i, score: 85 },
+  { re: /^(forge|neoforge)[-_].*\.jar$/i, score: 80 },
+  { re: /^minecraft_server.*\.jar$/i, score: 80 },
+  { re: /.*-server\.jar$/i, score: 60 },
+];
+
+function matchServerJarScore(fileName) {
+  for (const { re, score } of SERVER_JAR_PATTERNS) {
+    if (re.test(fileName)) return score;
+  }
+  return 0;
+}
+
+function scoreServerJarCandidate(roamingRoot, jarPath, version) {
+  const nameScore = matchServerJarScore(path.basename(jarPath));
+  if (nameScore === 0) return 0;
   const dir = path.dirname(jarPath);
   const rel = path.relative(roamingRoot, dir).toLowerCase();
-  let s = 0;
-  if (rel.includes(version.toLowerCase())) s += 10;
-  if (rel.includes('minecraft-server')) s += 5;
-  if (rel.includes('servers')) s += 3;
-  if (rel.includes('server')) s += 1;
+  let s = nameScore;
+  if (rel === 'minecraftserver') s += 30; // raíz del servidor de TLauncher
+  else if (rel.includes('minecraftserver')) s += 10;
+  if (rel.includes('minecraft-server')) s += 8;
+  if (rel === '') s += 2;
+  if (rel.includes(version.toLowerCase())) s += 5;
+  // El jar de arranque está en la raíz del servidor, no dentro de versions/ ni cache/.
+  if (rel.includes('versions') || rel.includes('cache')) s -= 20;
   return s;
+}
+
+function pickBestServerJarInDir(roamingRoot, dir, version) {
+  if (!fs.existsSync(dir)) return null;
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const acc = [];
+  for (const e of entries) {
+    if (!e.isFile() || !e.name.toLowerCase().endsWith('.jar')) continue;
+    const jarPath = path.join(dir, e.name);
+    const score = scoreServerJarCandidate(roamingRoot, jarPath, version);
+    if (score > 0) acc.push({ jarPath, score });
+  }
+  if (acc.length === 0) return null;
+  acc.sort((a, b) => b.score - a.score);
+  return acc[0].jarPath;
 }
 
 function collectServerJars(roamingRoot, dir, version, depth, maxDepth, acc) {
   if (depth > maxDepth || !fs.existsSync(dir)) return;
-  const jarPath = path.join(dir, 'server.jar');
-  if (fs.existsSync(jarPath)) {
-    acc.push({
-      jarPath,
-      score: scoreServerJarPath(roamingRoot, jarPath, version),
-    });
-  }
-  if (depth >= maxDepth) return;
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -100,31 +152,66 @@ function collectServerJars(roamingRoot, dir, version, depth, maxDepth, acc) {
     return;
   }
   for (const e of entries) {
+    if (!e.isFile() || !e.name.toLowerCase().endsWith('.jar')) continue;
+    const jarPath = path.join(dir, e.name);
+    const score = scoreServerJarCandidate(roamingRoot, jarPath, version);
+    if (score > 0) acc.push({ jarPath, score });
+  }
+  if (depth >= maxDepth) return;
+  for (const e of entries) {
     if (!e.isDirectory()) continue;
-    if (SKIP_MINECRAFT_WALK_DIRS.has(e.name)) continue;
+    if (shouldSkipWalkDir(e.name)) continue;
     collectServerJars(roamingRoot, path.join(dir, e.name), version, depth + 1, maxDepth, acc);
   }
 }
 
 /**
- * Busca server.jar bajo la carpeta del cliente (.minecraft), como en TLauncher.
+ * Busca el .jar de arranque del servidor bajo la carpeta del cliente (.minecraft).
+ * Soporta el servidor que crea TLauncher en `.minecraft\minecraftServer` y forks
+ * con nombres como `paper-1.21-118.jar`, no solo `server.jar`.
  */
 export function findServerJarUnderMinecraftRoot(roamingRoot, version) {
   const normalizedVersion = normalizeVersion(version);
-  const candidates = [
-    path.join(roamingRoot, 'minecraft-server', normalizedVersion, 'server.jar'),
-    path.join(roamingRoot, 'servers', normalizedVersion, 'server.jar'),
-    path.join(roamingRoot, normalizedVersion, 'server.jar'),
-    path.join(roamingRoot, 'server', 'server.jar'),
+  // 1) Carpetas de servidor más habituales: elige el mejor jar de cada una.
+  const serverDirs = [
+    path.join(roamingRoot, 'minecraftServer'), // TLauncher
+    path.join(roamingRoot, 'minecraft-server', normalizedVersion),
+    path.join(roamingRoot, 'servers', normalizedVersion),
+    path.join(roamingRoot, normalizedVersion),
+    path.join(roamingRoot, 'server'),
   ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
+  for (const dir of serverDirs) {
+    const jar = pickBestServerJarInDir(roamingRoot, dir, normalizedVersion);
+    if (jar) return jar;
   }
+  // 2) Búsqueda recursiva con puntuación como último recurso.
   const acc = [];
   collectServerJars(roamingRoot, roamingRoot, normalizedVersion, 0, 6, acc);
   if (acc.length === 0) return null;
   acc.sort((a, b) => b.score - a.score);
   return acc[0].jarPath;
+}
+
+/**
+ * JDK incluido junto al servidor (p. ej. `minecraftServer\jdk-21...\bin\java.exe`).
+ * TLauncher trae su propio Java; usarlo evita fallos por la versión de Java del sistema.
+ */
+function findBundledJava(serverDir) {
+  if (!serverDir || !fs.existsSync(serverDir)) return null;
+  const exe = process.platform === 'win32' ? 'java.exe' : 'java';
+  let entries;
+  try {
+    entries = fs.readdirSync(serverDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (!/^(jdk|jre|java|runtime)/i.test(e.name)) continue;
+    const candidate = path.join(serverDir, e.name, 'bin', exe);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
 }
 
 function resolveAutoPaths(config) {
@@ -181,8 +268,10 @@ function resolveAutoPaths(config) {
     resolved.serverJar = fs.existsSync(candidateJar) ? candidateJar : path.resolve(defaults.serverJar);
   }
 
-  if (!resolved.javaPath) {
-    resolved.javaPath = 'java';
+  // Java: si no se indicó uno propio, usa el JDK que TLauncher trae junto al
+  // servidor (la versión correcta) antes de caer al `java` del sistema.
+  if (!resolved.javaPath || String(resolved.javaPath).trim() === 'java') {
+    resolved.javaPath = findBundledJava(resolved.serverDirectory) || 'java';
   }
 
   return resolved;

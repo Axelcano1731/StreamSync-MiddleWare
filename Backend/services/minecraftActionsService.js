@@ -28,6 +28,19 @@ const DEFAULT_MAX_REPEAT = 50;
 const HARD_REPEAT_LIMIT = 100;
 const SUPPORTED_EVENTS = new Set(['gift', 'follow', 'like', 'share']);
 
+// Socket.io para avisar al overlay cuando un regalo dispara un comando.
+let ioRef = null;
+
+export function initMinecraftActions(io) {
+  ioRef = io;
+}
+
+function emitTrigger(payload) {
+  if (!ioRef) return;
+  ioRef.emit('minecraftGift', payload);
+  ioRef.of('/overlay').emit('minecraftGift', payload);
+}
+
 function toNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
@@ -110,15 +123,29 @@ export async function handleMinecraftActions(eventType, data = {}) {
     if (!command) continue;
 
     const times = resolveRepeat(rule, data);
+    let sent = 0;
 
     for (let i = 0; i < times; i += 1) {
       try {
         await sendMinecraftCommand(command);
+        sent += 1;
       } catch (err) {
         // Si el servidor se cayo a mitad, no seguir insistiendo con esta regla.
         console.warn(`No se pudo enviar comando de Minecraft "${command}":`, err.message);
         break;
       }
+    }
+
+    if (sent > 0) {
+      emitTrigger({
+        user: context.user,
+        giftName: data.giftName || context.giftName || eventType,
+        giftImage: data.giftImage || null,
+        command,
+        repeat: sent,
+        diamonds: context.diamondCount,
+        at: Date.now(),
+      });
     }
   }
 }
