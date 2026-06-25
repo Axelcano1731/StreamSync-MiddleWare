@@ -79,6 +79,17 @@ function createApp() {
       controlBattle(req.query.action || 'reset');
       res.json({ ok: true, action: req.query.action || 'reset' });
     });
+
+    app.get('/test/chat', (req, res) => {
+      const eventData = {
+        uniqueId: req.query.u || 'tester',
+        comment: req.query.msg || req.query.c || '',
+        profilePic: null,
+      };
+      if (ioInstance) ioInstance.emit('chat', eventData);
+      processEvent('chat', eventData);
+      res.json({ ok: true, simulated: eventData });
+    });
   }
 
   return app;

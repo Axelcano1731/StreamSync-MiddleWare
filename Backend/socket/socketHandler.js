@@ -15,6 +15,7 @@ import {
   getSuggestedMinecraftPaths,
 } from '../services/minecraftServerService.js';
 import { initAvatarBattle, controlBattle } from '../services/avatarBattleService.js';
+import { initStairsRace, controlStairs } from '../services/stairsRaceService.js';
 import { initMinecraftActions } from '../services/minecraftActionsService.js';
 
 function emitConfig(io, config) {
@@ -36,6 +37,7 @@ function resolveCallback(arg1, arg2) {
 export default function socketHandler(io) {
   initEngine(io);
   initAvatarBattle(io);
+  initStairsRace(io);
   initMinecraftActions(io);
   loadConfig();
   startSpotifyBroadcast();
@@ -133,6 +135,19 @@ export default function socketHandler(io) {
     socket.on('battleControl', (action, callback) => {
       try {
         controlBattle(typeof action === 'string' ? action : 'reset');
+        if (typeof callback === 'function') callback({ ok: true });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on('stairsControl', (payload, callback) => {
+      try {
+        if (typeof payload === 'string') {
+          controlStairs(payload);
+        } else {
+          controlStairs(payload?.action || 'reset', payload || {});
+        }
         if (typeof callback === 'function') callback({ ok: true });
       } catch (error) {
         if (typeof callback === 'function') callback({ ok: false, error: error.message });

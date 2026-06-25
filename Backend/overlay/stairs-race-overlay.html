@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamSync — Stairs Race</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: transparent;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      user-select: none;
+    }
+    #stage { position: fixed; inset: 0; }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    #banner {
+      position: fixed; top: 42%; left: 50%; transform: translate(-50%,-50%) scale(.6);
+      padding: 22px 46px; border-radius: 20px;
+      font-size: 44px; font-weight: 900; color: #fff;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5), inset 0 0 0 2px rgba(255,255,255,.25);
+      text-shadow: 0 3px 10px rgba(0,0,0,.5);
+      opacity: 0; transition: opacity .35s ease, transform .35s cubic-bezier(.2,1.4,.4,1);
+      pointer-events: none; text-align: center; white-space: nowrap;
+    }
+    #banner.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+    #banner.heroes { background: linear-gradient(135deg, rgba(37,99,235,.94), rgba(56,189,248,.94)); }
+    #banner.villains { background: linear-gradient(135deg, rgba(220,38,38,.94), rgba(251,113,84,.94)); }
+
+    #conn {
+      position: fixed; bottom: 10px; right: 12px;
+      display: flex; align-items: center; gap: 7px;
+      font-size: 11px; color: rgba(255,255,255,.65);
+      background: rgba(0,0,0,.4); padding: 5px 10px; border-radius: 999px;
+      pointer-events: none;
+    }
+    #conn .dot { width: 9px; height: 9px; border-radius: 50%; background: #f04438; box-shadow: 0 0 8px #f04438; }
+    #conn.on .dot { background: #16d680; box-shadow: 0 0 8px #16d680; }
+  </style>
+</head>
+<body>
+  <div id="stage"><canvas id="game"></canvas></div>
+  <div id="banner"></div>
+  <div id="conn"><span class="dot"></span><span id="conn-text">desconectado</span></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    const params = new URLSearchParams(location.search);
+    const DEMO = params.get('demo') === '1';
+
+    const HEROES = { key: 'heroes', name: 'HÉROES', emoji: '🦸', up: '#38bdf8', deep: '#1d4ed8' };
+    const VILL  = { key: 'villains', name: 'VILLANOS', emoji: '🦹', up: '#fb7155', deep: '#dc2626' };
+
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const bannerEl = document.getElementById('banner');
+    const connEl = document.getElementById('conn');
+    const connText = document.getElementById('conn-text');
+
+    let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+    function resize() {
+      W = window.innerWidth; H = window.innerHeight;
+      canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    window.addEventListener('resize', resize); resize();
+
+    // ---------- estado del juego ----------
+    const state = {
+      mode: params.get('mode') === 'race' ? 'race' : 'tug',
+      goal: Math.max(50, parseInt(params.get('goal') || '1000', 10) || 1000),
+      pos: 0,            // tug: posicion del unico escalador
+      posA: 0, posB: 0,  // race: heroes / villains
+      dispPos: 0, dispA: 0, dispB: 0, // valores suavizados para animar
+      wins: { heroes: 0, villains: 0 },
+      round: 1,
+      roundOver: false,
+      contrib: new Map(), // userId -> { name, team, steps }
+      popups: [],
+      pulse: { heroes: 0, villains: 0 },
+    };
+
+    function midStart() {
+      state.pos = state.goal / 2;
+      state.dispPos = state.pos;
+      state.posA = 0; state.posB = 0; state.dispA = 0; state.dispB = 0;
+    }
+    midStart();
+
+    function resetRound(keepWins = true) {
+      if (!keepWins) state.wins = { heroes: 0, villains: 0 };
+      state.roundOver = false;
+      state.contrib.clear();
+      state.popups.length = 0;
+      bannerEl.classList.remove('show');
+      midStart();
+    }
+
+    function setMode(mode) {
+      state.mode = mode === 'race' ? 'race' : 'tug';
+      resetRound(true);
+    }
+
+    function showBanner(teamObj) {
+      bannerEl.textContent = `🏆 ¡${teamObj.name} GANAN!`;
+      bannerEl.className = 'show ' + teamObj.key;
+      setTimeout(() => { resetRound(true); state.round++; }, 3200);
+    }
+
+    function topContributor() {
+      let best = null;
+      for (const v of state.contrib.values()) {
+        if (!best || v.steps > best.steps) best = v;
+      }
+      return best;
+    }
+
+    function addPopup(team, steps, name) {
+      const onLeft = team === 'heroes';
+      state.popups.push({
+        team, name,
+        text: (onLeft ? '+' : '−') + steps,
+        x: onLeft ? W * 0.28 : W * 0.72,
+        y: H * 0.5,
+        life: 1,
+      });
+      if (state.popups.length > 24) state.popups.shift();
+    }
+
+    // ---------- entrada de eventos ----------
+    function applyPush(team, steps, actor) {
+      if (state.roundOver) return;
+      team = team === 'villains' ? 'villains' : 'heroes';
+      steps = Math.max(1, Math.round(steps || 0));
+      const teamObj = team === 'heroes' ? HEROES : VILL;
+      state.pulse[team] = 1;
+      addPopup(team, steps, actor && actor.name);
+
+      // contribucion (para "EL MÁS VELOZ")
+      const id = (actor && (actor.userId || actor.name)) || 'anon';
+      const prev = state.contrib.get(id) || { name: (actor && actor.name) || 'Anon', team, steps: 0 };
+      prev.steps += steps; prev.team = team; state.contrib.set(id, prev);
+
+      if (state.mode === 'race') {
+        if (team === 'heroes') state.posA = Math.min(state.goal, state.posA + steps);
+        else state.posB = Math.min(state.goal, state.posB + steps);
+        if (state.posA >= state.goal) win('heroes');
+        else if (state.posB >= state.goal) win('villains');
+      } else {
+        state.pos += team === 'heroes' ? steps : -steps;
+        state.pos = Math.max(0, Math.min(state.goal, state.pos));
+        if (state.pos >= state.goal) win('heroes');
+        else if (state.pos <= 0) win('villains');
+      }
+    }
+
+    function win(team) {
+      if (state.roundOver) return;
+      state.roundOver = true;
+      state.wins[team]++;
+      showBanner(team === 'heroes' ? HEROES : VILL);
+    }
+
+    function applyConfig(cfg) {
+      const s = cfg && cfg.stairsRace;
+      if (!s) return;
+      const newGoal = Math.max(50, Number(s.goal) || state.goal);
+      const newMode = s.mode === 'race' ? 'race' : 'tug';
+      const changed = newMode !== state.mode || newGoal !== state.goal;
+      state.goal = newGoal;
+      if (changed) { state.mode = newMode; resetRound(true); }
+    }
+
+    // ---------- dibujo ----------
+    function roundRect(x, y, w, h, r) {
+      r = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function drawTrack(cx, top, bottom, width, accentTop, accentBottom) {
+      const x = cx - width / 2;
+      const h = bottom - top;
+      const g = ctx.createLinearGradient(0, top, 0, bottom);
+      g.addColorStop(0, accentTop + '55');
+      g.addColorStop(1, accentBottom + '55');
+      ctx.fillStyle = 'rgba(8,10,20,0.55)';
+      roundRect(x, top, width, h, 18); ctx.fill();
+      ctx.fillStyle = g;
+      roundRect(x, top, width, h, 18); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+      ctx.lineWidth = 2; roundRect(x, top, width, h, 18); ctx.stroke();
+
+      // rungs (escalones)
+      const rungs = 16;
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 2;
+      for (let i = 1; i < rungs; i++) {
+        const y = top + (h * i) / rungs;
+        ctx.beginPath(); ctx.moveTo(x + 8, y); ctx.lineTo(x + width - 8, y); ctx.stroke();
+      }
+    }
+
+    function drawClimber(cx, cy, teamObj, scale) {
+      scale = scale || 1;
+      const r = 30 * scale;
+      // glow
+      ctx.save();
+      ctx.shadowColor = teamObj.up; ctx.shadowBlur = 26;
+      const g = ctx.createRadialGradient(cx, cy - r * 0.3, r * 0.2, cx, cy, r);
+      g.addColorStop(0, teamObj.up); g.addColorStop(1, teamObj.deep);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.font = `${Math.round(r * 1.15)}px serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(teamObj.emoji, cx, cy + 1);
+    }
+
+    function drawBigNumber(cx, cy, value) {
+      ctx.save();
+      ctx.font = '900 64px "Segoe UI", system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.strokeText(value, cx, cy);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(value, cx, cy);
+      ctx.restore();
+    }
+
+    function drawProgressBar(x, y, w, ratio, accent) {
+      const h = 16;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      roundRect(x, y, w, h, 8); ctx.fill();
+      const g = ctx.createLinearGradient(x, 0, x + w, 0);
+      g.addColorStop(0, accent.deep); g.addColorStop(1, accent.up);
+      ctx.fillStyle = g;
+      roundRect(x, y, Math.max(h, w * Math.max(0, Math.min(1, ratio))), h, 8); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = '700 12px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(Math.round(ratio * 100) + '%', x + w / 2, y + h / 2 + 1);
+    }
+
+    function drawLabel(cx, y, teamObj, arrow, wins) {
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '900 22px "Segoe UI", sans-serif';
+      ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 8;
+      ctx.fillStyle = teamObj.up;
+      ctx.fillText(`${arrow} ${teamObj.name}`, cx, y);
+      ctx.font = '900 30px "Segoe UI", sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(String(wins), cx, y + 30);
+      ctx.restore();
+    }
+
+    function drawScoreboard() {
+      const cx = W / 2, y = 34;
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '900 26px "Segoe UI", sans-serif';
+      ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 10;
+      ctx.fillStyle = HEROES.up; ctx.textAlign = 'right';
+      ctx.fillText(`🟦 ${state.wins.heroes}`, cx - 26, y);
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.textAlign = 'center';
+      ctx.fillText('VS', cx, y);
+      ctx.fillStyle = VILL.up; ctx.textAlign = 'left';
+      ctx.fillText(`${state.wins.villains} 🟥`, cx + 26, y);
+      ctx.restore();
+    }
+
+    function drawTopContributor() {
+      const best = topContributor();
+      if (!best) return;
+      const teamObj = best.team === 'heroes' ? HEROES : VILL;
+      const y = H - 28;
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '800 13px "Segoe UI", sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      ctx.fillText('⚡ EL MÁS VELOZ', W / 2, y - 14);
+      ctx.font = '900 18px "Segoe UI", sans-serif';
+      ctx.fillStyle = teamObj.up;
+      ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 6;
+      ctx.fillText(`${best.name}  ·  ${best.steps}`, W / 2, y + 4);
+      ctx.restore();
+    }
+
+    function drawPopups(dt) {
+      for (let i = state.popups.length - 1; i >= 0; i--) {
+        const p = state.popups[i];
+        p.life -= dt * 0.8;
+        // heroes flotan hacia arriba, villanos hacia abajo
+        p.y += (p.team === 'heroes' ? -1 : 1) * dt * 70;
+        if (p.life <= 0) { state.popups.splice(i, 1); continue; }
+        const teamObj = p.team === 'heroes' ? HEROES : VILL;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 26px "Segoe UI", sans-serif';
+        ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+        ctx.strokeText(p.text, p.x, p.y);
+        ctx.fillStyle = teamObj.up;
+        ctx.fillText(p.text, p.x, p.y);
+        if (p.name) {
+          ctx.font = '700 13px "Segoe UI", sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,.8)';
+          ctx.fillText(p.name, p.x, p.y + 20);
+        }
+        ctx.restore();
+      }
+    }
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      ctx.clearRect(0, 0, W, H);
+
+      const top = 96, bottom = H - 96;
+
+      if (state.mode === 'tug') {
+        state.dispPos = lerp(state.dispPos, state.pos, 0.12);
+        const cx = W / 2;
+        const ratio = state.dispPos / state.goal;
+        drawTrack(cx, top, bottom, 110, HEROES.up, VILL.up);
+        // zonas de victoria
+        ctx.fillStyle = HEROES.up + '22'; roundRect(cx - 55, top, 110, 26, 12); ctx.fill();
+        ctx.fillStyle = VILL.up + '22'; roundRect(cx - 55, bottom - 26, 110, 26, 12); ctx.fill();
+
+        const cy = lerp(bottom, top, ratio);
+        drawClimber(cx, cy, ratio >= 0.5 ? HEROES : VILL, 1);
+        drawBigNumber(cx, top - 44 < 40 ? cy - 60 : (top + bottom) / 2, Math.round(state.dispPos));
+
+        drawLabel(W * 0.16, top + 10, HEROES, '↑', state.wins.heroes);
+        drawLabel(W * 0.84, top + 10, VILL, '↓', state.wins.villains);
+        drawProgressBar(W * 0.5 - 160, bottom + 40, 320, ratio, HEROES);
+      } else {
+        state.dispA = lerp(state.dispA, state.posA, 0.12);
+        state.dispB = lerp(state.dispB, state.posB, 0.12);
+        const xA = W * 0.34, xB = W * 0.66;
+        drawTrack(xA, top, bottom, 96, HEROES.up, HEROES.deep);
+        drawTrack(xB, top, bottom, 96, VILL.up, VILL.deep);
+        // meta
+        ctx.fillStyle = 'rgba(255,255,255,.10)';
+        roundRect(xA - 48, top, 96, 22, 10); ctx.fill();
+        roundRect(xB - 48, top, 96, 22, 10); ctx.fill();
+        ctx.font = '700 14px "Segoe UI"'; ctx.fillStyle = 'rgba(255,255,255,.6)';
+        ctx.textAlign = 'center'; ctx.fillText('🏁 META', xA, top + 11); ctx.fillText('🏁 META', xB, top + 11);
+
+        const rA = state.dispA / state.goal, rB = state.dispB / state.goal;
+        drawClimber(xA, lerp(bottom, top, rA), HEROES, 1);
+        drawClimber(xB, lerp(bottom, top, rB), VILL, 1);
+        drawBigNumber(xA, bottom + 50, Math.round(state.dispA));
+        drawBigNumber(xB, bottom + 50, Math.round(state.dispB));
+        drawLabel(xA, top - 30, HEROES, '↑', state.wins.heroes);
+        drawLabel(xB, top - 30, VILL, '↑', state.wins.villains);
+        drawProgressBar(xA - 70, bottom + 76, 140, rA, HEROES);
+        drawProgressBar(xB - 70, bottom + 76, 140, rB, VILL);
+      }
+
+      drawScoreboard();
+      drawTopContributor();
+      drawPopups(dt);
+
+      // decae el pulso
+      state.pulse.heroes = Math.max(0, state.pulse.heroes - dt * 2);
+      state.pulse.villains = Math.max(0, state.pulse.villains - dt * 2);
+
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // ---------- Socket.io ----------
+    if (!DEMO && typeof io !== 'undefined') {
+      const socket = io();
+      socket.on('connect', () => {
+        connEl.classList.add('on'); connText.textContent = 'conectado';
+        socket.emit('getAlertConfig', (cfg) => applyConfig(cfg));
+      });
+      socket.on('disconnect', () => { connEl.classList.remove('on'); connText.textContent = 'desconectado'; });
+      socket.on('alertConfig', (cfg) => applyConfig(cfg));
+      socket.on('config', (cfg) => applyConfig(cfg));
+
+      socket.on('stairs:push', (d) => applyPush(d.team, d.steps, d.actor));
+      socket.on('stairs:join', (d) => addPopup(d.team, 0, (d.actor && d.actor.name) + ' ⚑'));
+      socket.on('stairs:control', (d) => {
+        if (!d) return;
+        if (d.action === 'mode') setMode(d.mode);
+        else resetRound(true);
+      });
+    } else {
+      connText.textContent = 'modo demo';
+      connEl.classList.add('on');
+    }
+
+    // ---------- Modo demo ----------
+    if (DEMO) {
+      const names = ['Axel', 'Luna', 'Kai', 'Mia', 'Zed', 'Nova', 'Rex', 'Iris'];
+      const tiers = [5, 50, 150, 500];
+      setInterval(() => {
+        if (state.roundOver) return;
+        const team = Math.random() < 0.52 ? 'heroes' : 'villains';
+        const steps = tiers[(Math.random() * tiers.length) | 0];
+        applyPush(team, steps, { name: names[(Math.random() * names.length) | 0], userId: 'demo' + ((Math.random() * 5) | 0) });
+      }, 700);
+    }
+  })();
+  </script>
+</body>
+</html>

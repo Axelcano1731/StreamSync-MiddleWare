@@ -11,6 +11,8 @@ const NAV_ITEMS = [
   { key: "minecraft", icon: "⛏️", label: "Minecraft" },
   { key: "spotify", icon: "🎵", label: "Spotify" },
   { key: "wordle", icon: "🟩", label: "Wordle" },
+  { key: "avatarBattle", icon: "⚔️", label: "Avatar Battle" },
+  { key: "stairsRace", icon: "🪜", label: "Stairs Race" },
 ];
 
 const BOTTOM_ITEMS = [{ key: "settings", icon: "⚙️", label: "Configuración" }];

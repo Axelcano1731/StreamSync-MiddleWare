@@ -199,6 +199,34 @@ const DEFAULT_CONFIG = {
       default: { type: 'avatar', hp: 80, power: 8, weapon: 'fist' },
     },
   },
+  stairsRace: {
+    enabled: true,
+    mode: 'tug',        // 'tug' = tira y afloja (1 escalador) | 'race' = carrera (2 escaladores)
+    goal: 1000,         // pasos para llegar arriba / ganar la ronda
+    defaultTeam: 'heroes', // a que bando va un regalo sin mapeo ni keyword
+    keywords: {
+      heroes: ['heroe', 'heroes', 'team a', 'azul', 'azules'],
+      villains: ['villano', 'villana', 'villanos', 'team b', 'rojo', 'rojos'],
+    },
+    rules: {
+      // Que regalos pertenecen a cada bando (por nombre o giftId). El que envia
+      // un regalo mapeado empuja en esa direccion (salvo que haya elegido bando
+      // por keyword en el chat, que tiene prioridad).
+      heroes: { byId: {}, byName: { rose: true, rosa: true, gg: true, heart: true } },
+      villains: { byId: {}, byName: { skull: true, calavera: true, bomb: true } },
+      // Magnitud del empuje segun diamantes del regalo (tier mas alto alcanzado).
+      steps: {
+        byTier: [
+          { minDiamonds: 1, steps: 5 },
+          { minDiamonds: 5, steps: 50 },
+          { minDiamonds: 50, steps: 150 },
+          { minDiamonds: 100, steps: 500 },
+          { minDiamonds: 500, steps: 1000 },
+        ],
+        default: 5,
+      },
+    },
+  },
 };
 
 let currentConfig = null;

@@ -46,6 +46,22 @@ const BUILTIN_WIDGETS = [
     url: `${BACKEND_URL}/overlay/now-playing.html`,
     size: "320x120",
   },
+  {
+    key: "avatar-battle",
+    icon: "⚔️",
+    title: "Avatar Battle",
+    desc: "Juego de viewers: regalos generan guerreros y likes los curan",
+    url: `${BACKEND_URL}/overlay/avatar-battle-overlay.html`,
+    size: "1920x1080",
+  },
+  {
+    key: "stairs-race",
+    icon: "🪜",
+    title: "Stairs Race",
+    desc: "Juego de viewers: héroes suben y villanos bajan con donaciones",
+    url: `${BACKEND_URL}/overlay/stairs-race-overlay.html`,
+    size: "1920x1080",
+  },
 ];
 
 const PLACEMENTS = [

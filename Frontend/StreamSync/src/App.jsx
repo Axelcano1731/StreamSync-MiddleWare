@@ -16,6 +16,8 @@ import AutomationPanel from "./components/AutomationPanel";
 import MinecraftPanel from "./components/MinecraftPanel";
 import { VoiceSettings } from "./components/VoiceSettings";
 import WordlePanel from "./components/WordlePanel";
+import AvatarBattlePanel from "./components/AvatarBattlePanel";
+import StairsRacePanel from "./components/StairsRacePanel";
 import ChatPanel from "./components/ChatPanel";
 import StickerSoundsPanel from "./components/StickerSoundsPanel";
 import { StickerSoundsProvider } from "./context/StickerSoundsContext";
@@ -31,6 +33,8 @@ const PAGE_TITLES = {
   minecraft: "Minecraft",
   spotify: "Spotify",
   wordle: "StreamWordle",
+  avatarBattle: "Avatar Battle",
+  stairsRace: "Stairs Race",
   settings: "Configuración",
 };
 
@@ -144,6 +148,20 @@ function App() {
         return (
           <div className="main-content">
             <WordlePanel />
+          </div>
+        );
+
+      case "avatarBattle":
+        return (
+          <div className="main-content">
+            <AvatarBattlePanel />
+          </div>
+        );
+
+      case "stairsRace":
+        return (
+          <div className="main-content">
+            <StairsRacePanel />
           </div>
         );
 

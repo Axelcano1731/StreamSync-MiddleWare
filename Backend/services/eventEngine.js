@@ -3,6 +3,7 @@ import { searchAndPlay, skipTrack, getCurrentTrack, getSpotifyStatus } from './s
 import { dispatchWebhooks } from './webhookService.js';
 import { handleMinecraftActions } from './minecraftActionsService.js';
 import { handleEvent as handleAvatarBattle } from './avatarBattleService.js';
+import { handleEvent as handleStairsRace } from './stairsRaceService.js';
 
 /**
  * Event Engine — Processes stream events through configurable rules
@@ -365,6 +366,13 @@ export function processEvent(eventType, data) {
     handleAvatarBattle(eventType, data);
   } catch (err) {
     console.warn('Error en Avatar Battle:', err.message);
+  }
+
+  // Stairs Race: traduce gifts/chat en empujes del juego de escalera (overlay web).
+  try {
+    handleStairsRace(eventType, data);
+  } catch (err) {
+    console.warn('Error en Stairs Race:', err.message);
   }
 
   if (!alertConfig.enabled) return;
