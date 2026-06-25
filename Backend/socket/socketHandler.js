@@ -14,6 +14,7 @@ import {
   getMinecraftEmitter,
   getSuggestedMinecraftPaths,
 } from '../services/minecraftServerService.js';
+import { initAvatarBattle, controlBattle } from '../services/avatarBattleService.js';
 
 function emitConfig(io, config) {
   io.emit('alertConfig', config);
@@ -33,6 +34,7 @@ function resolveCallback(arg1, arg2) {
 
 export default function socketHandler(io) {
   initEngine(io);
+  initAvatarBattle(io);
   loadConfig();
   startSpotifyBroadcast();
 
@@ -123,6 +125,15 @@ export default function socketHandler(io) {
         if (typeof callback === 'function') {
           callback({ ok: false, error: error.message });
         }
+      }
+    });
+
+    socket.on('battleControl', (action, callback) => {
+      try {
+        controlBattle(typeof action === 'string' ? action : 'reset');
+        if (typeof callback === 'function') callback({ ok: true });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
       }
     });
 

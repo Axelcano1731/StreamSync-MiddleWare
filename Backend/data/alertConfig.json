@@ -157,5 +157,35 @@
     "port": 25565,
     "autoAcceptEula": true,
     "startupArgs": ""
+  },
+  "minecraftActions": {
+    "enabled": true,
+    "rules": [
+      { "event": "gift", "giftName": "Rose",         "command": "bedrock tnt {user}",      "enabled": true, "repeatPerGift": true, "maxRepeat": 10 },
+      { "event": "gift", "giftName": "GG",           "command": "bedrock randomtnt",       "enabled": true },
+      { "event": "gift", "giftName": "Finger Heart", "command": "bedrock supertnt 1 4",    "enabled": true },
+      { "event": "gift", "giftName": "Doughnut",     "command": "bedrock glass_prison 5",  "enabled": true, "minDiamonds": 30 },
+      { "event": "gift", "giftName": "Hand Hearts",  "command": "bedrock glass_prison 10", "enabled": true, "minDiamonds": 100 },
+      { "event": "gift", "giftName": "Galaxy",       "command": "bedrock supertnt 1 8",    "enabled": true, "minDiamonds": 500 }
+    ]
+  },
+  "avatarBattle": {
+    "enabled": true,
+    "likesBuff": true,
+    "likesPerBuff": 50,
+    "rules": {
+      "byId": {},
+      "byName": {
+        "rose": { "type": "avatar", "hp": 80, "power": 8, "weapon": "fist", "tint": "#ff5fa2", "scaleWithCombo": true },
+        "heart": { "type": "effect", "effect": "heal", "target": "A", "intensity": 1 }
+      },
+      "byTier": [
+        { "minDiamonds": 1, "action": { "type": "avatar", "hp": 80, "power": 8, "weapon": "fist", "scaleWithCombo": true } },
+        { "minDiamonds": 5, "action": { "type": "avatar", "hp": 120, "power": 15, "weapon": "sword" } },
+        { "minDiamonds": 50, "action": { "type": "avatar", "hp": 200, "power": 30, "weapon": "hammer" } },
+        { "minDiamonds": 100, "action": { "type": "effect", "effect": "meteor", "target": "all", "intensity": 1 } }
+      ],
+      "default": { "type": "avatar", "hp": 80, "power": 8, "weapon": "fist" }
+    }
   }
 }

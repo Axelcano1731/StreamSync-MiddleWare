@@ -176,6 +176,29 @@ const DEFAULT_CONFIG = {
     autoAcceptEula: false,
     startupArgs: '',
   },
+  minecraftActions: {
+    enabled: false,
+    rules: [],
+  },
+  avatarBattle: {
+    enabled: true,
+    likesBuff: true,
+    likesPerBuff: 50,
+    rules: {
+      byId: {},
+      byName: {
+        rose: { type: 'avatar', hp: 80, power: 8, weapon: 'fist', tint: '#ff5fa2', scaleWithCombo: true },
+        heart: { type: 'effect', effect: 'heal', target: 'A', intensity: 1 },
+      },
+      byTier: [
+        { minDiamonds: 1, action: { type: 'avatar', hp: 80, power: 8, weapon: 'fist', scaleWithCombo: true } },
+        { minDiamonds: 5, action: { type: 'avatar', hp: 120, power: 15, weapon: 'sword' } },
+        { minDiamonds: 50, action: { type: 'avatar', hp: 200, power: 30, weapon: 'hammer' } },
+        { minDiamonds: 100, action: { type: 'effect', effect: 'meteor', target: 'all', intensity: 1 } },
+      ],
+      default: { type: 'avatar', hp: 80, power: 8, weapon: 'fist' },
+    },
+  },
 };
 
 let currentConfig = null;

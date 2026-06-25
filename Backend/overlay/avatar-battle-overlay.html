@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamSync — Avatar Battle</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: transparent;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      user-select: none;
+    }
+    #stage { position: fixed; inset: 0; }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    /* Marcador de equipos */
+    #scoreboard {
+      position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 16px; align-items: center;
+      font-weight: 800; font-size: 20px; letter-spacing: .5px;
+      text-shadow: 0 2px 8px rgba(0,0,0,.7);
+      pointer-events: none;
+    }
+    #scoreboard .team { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: rgba(0,0,0,.35); }
+    #scoreboard .team.A { color: #5ad7ff; box-shadow: inset 0 0 0 2px rgba(90,215,255,.5); }
+    #scoreboard .team.B { color: #ff7a6b; box-shadow: inset 0 0 0 2px rgba(255,122,107,.5); }
+    #scoreboard .vs { color: #fff; opacity: .8; font-size: 16px; }
+
+    /* Banner de ganador */
+    #banner {
+      position: fixed; top: 38%; left: 50%; transform: translate(-50%,-50%) scale(.6);
+      padding: 22px 46px; border-radius: 20px;
+      font-size: 46px; font-weight: 900; color: #fff;
+      background: linear-gradient(135deg, rgba(124,58,237,.92), rgba(236,72,153,.92));
+      box-shadow: 0 20px 60px rgba(0,0,0,.5), inset 0 0 0 2px rgba(255,255,255,.25);
+      text-shadow: 0 3px 10px rgba(0,0,0,.5);
+      opacity: 0; transition: opacity .35s ease, transform .35s cubic-bezier(.2,1.4,.4,1);
+      pointer-events: none; text-align: center; white-space: nowrap;
+    }
+    #banner.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+
+    /* Indicador de conexion (ocultar en produccion: display:none) */
+    #conn {
+      position: fixed; bottom: 10px; right: 12px;
+      display: flex; align-items: center; gap: 7px;
+      font-size: 11px; color: rgba(255,255,255,.65);
+      background: rgba(0,0,0,.4); padding: 5px 10px; border-radius: 999px;
+      pointer-events: none;
+    }
+    #conn .dot { width: 9px; height: 9px; border-radius: 50%; background: #f04438; box-shadow: 0 0 8px #f04438; }
+    #conn.on .dot { background: #16d680; box-shadow: 0 0 8px #16d680; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game"></canvas>
+  </div>
+
+  <div id="scoreboard">
+    <div class="team A"><span>🟦</span><span id="countA">0</span></div>
+    <div class="vs">VS</div>
+    <div class="team B"><span id="countB">0</span><span>🟥</span></div>
+  </div>
+
+  <div id="banner"></div>
+
+  <div id="conn"><span class="dot"></span><span id="conn-text">desconectado</span></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    const params = new URLSearchParams(location.search);
+    const DEMO = params.get('demo') === '1';
+
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const bannerEl = document.getElementById('banner');
+    const countAEl = document.getElementById('countA');
+    const countBEl = document.getElementById('countB');
+    const connEl = document.getElementById('conn');
+    const connText = document.getElementById('conn-text');
+
+    let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+    function resize() {
+      W = window.innerWidth; H = window.innerHeight;
+      canvas.width = Math.floor(W * DPR);
+      canvas.height = Math.floor(H * DPR);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ---- Estado del juego ----
+    const TEAM = { A: 'A', B: 'B' };
+    const TEAM_COLOR = { A: '#5ad7ff', B: '#ff7a6b' };
+    const MAX_FIGHTERS = 60;
+
+    let fighters = [];
+    let projectiles = [];
+    let particles = [];
+    let floaters = [];
+    let meteors = [];
+    let spawnedAny = false;
+    let roundOver = false;
+    let bannerTimer = 0;
+    const imgCache = new Map();
+
+    const WEAPONS = {
+      fist:   { range: 26,  cd: 35,  dmgMult: 1.0, speed: 1.5, knock: 2,  color: '#ffffff', ranged: false },
+      sword:  { range: 38,  cd: 45,  dmgMult: 1.4, speed: 1.4, knock: 4,  color: '#dbeafe', ranged: false },
+      hammer: { range: 34,  cd: 75,  dmgMult: 2.4, speed: 1.05, knock: 12, color: '#fde68a', ranged: false },
+      bow:    { range: 320, cd: 70,  dmgMult: 1.1, speed: 1.2, knock: 1,  color: '#bbf7d0', ranged: true },
+    };
+
+    function rand(a, b) { return a + Math.random() * (b - a); }
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+    function teamCounts() {
+      let a = 0, b = 0;
+      for (const f of fighters) { if (f.hp > 0) (f.team === TEAM.A ? a++ : b++); }
+      return { a, b };
+    }
+
+    function loadAvatar(url) {
+      if (!url) return null;
+      if (imgCache.has(url)) return imgCache.get(url);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = url;
+      const entry = { img, ok: false };
+      img.onload = () => { entry.ok = true; };
+      img.onerror = () => { entry.ok = false; };
+      imgCache.set(url, entry);
+      return entry;
+    }
+
+    function spawnFighter(opts) {
+      if (fighters.filter(f => f.hp > 0).length >= MAX_FIGHTERS) {
+        // Reemplaza al mas debil para no saturar
+        const weakest = fighters.filter(f => f.hp > 0).sort((a, b) => a.hp - b.hp)[0];
+        if (weakest) weakest.hp = 0;
+      }
+
+      let team = opts.team === 'A' || opts.team === 'B' ? opts.team : null;
+      if (!team) {
+        const { a, b } = teamCounts();
+        team = a <= b ? TEAM.A : TEAM.B;
+      }
+
+      const fromLeft = team === TEAM.A;
+      const hp = clamp(Math.round(opts.hp || 80), 10, 100000);
+      const radius = clamp(16 + Math.sqrt(hp) * 0.7, 16, 46);
+
+      fighters.push({
+        team,
+        name: (opts.name || 'Anon').slice(0, 14),
+        avatar: loadAvatar(opts.avatarUrl),
+        x: fromLeft ? rand(40, W * 0.25) : rand(W * 0.75, W - 40),
+        y: rand(H * 0.25, H * 0.85),
+        vx: 0, vy: 0,
+        hp, maxHp: hp,
+        power: clamp(opts.power || 8, 1, 100000),
+        weapon: WEAPONS[opts.weapon] ? opts.weapon : 'fist',
+        tint: opts.tint || TEAM_COLOR[team],
+        radius,
+        cd: 0,
+        lunge: 0,
+        flash: 0,
+        spawnT: 1,
+      });
+      spawnedAny = true;
+      hideBanner();
+    }
+
+    function nearestEnemy(f) {
+      let best = null, bd = Infinity;
+      for (const o of fighters) {
+        if (o.hp <= 0 || o.team === f.team) continue;
+        const d = (o.x - f.x) ** 2 + (o.y - f.y) ** 2;
+        if (d < bd) { bd = d; best = o; }
+      }
+      return best ? { enemy: best, dist: Math.sqrt(bd) } : null;
+    }
+
+    function dealDamage(target, dmg, fromX, fromY, knock) {
+      target.hp -= dmg;
+      target.flash = 6;
+      const ang = Math.atan2(target.y - fromY, target.x - fromX);
+      target.vx += Math.cos(ang) * knock;
+      target.vy += Math.sin(ang) * knock;
+      floaters.push({ x: target.x, y: target.y - target.radius, text: '-' + Math.round(dmg), t: 1, color: '#ffd166' });
+      for (let i = 0; i < 6; i++) {
+        particles.push({ x: target.x, y: target.y, vx: rand(-3, 3), vy: rand(-3, 1), t: 1, color: target.tint });
+      }
+      if (target.hp <= 0) {
+        for (let i = 0; i < 16; i++) {
+          particles.push({ x: target.x, y: target.y, vx: rand(-4, 4), vy: rand(-4, 2), t: 1, color: target.tint });
+        }
+      }
+    }
+
+    function updateFighter(f) {
+      if (f.spawnT > 0) f.spawnT = Math.max(0, f.spawnT - 0.05);
+      if (f.flash > 0) f.flash--;
+      if (f.lunge > 0) f.lunge *= 0.8;
+      if (f.cd > 0) f.cd--;
+
+      const w = WEAPONS[f.weapon];
+      const tgt = nearestEnemy(f);
+
+      if (tgt) {
+        const { enemy, dist } = tgt;
+        const ang = Math.atan2(enemy.y - f.y, enemy.x - f.x);
+        if (dist > w.range) {
+          f.vx += Math.cos(ang) * w.speed * 0.25;
+          f.vy += Math.sin(ang) * w.speed * 0.25;
+        } else if (f.cd <= 0) {
+          // Atacar
+          f.cd = w.cd;
+          f.lunge = 8;
+          if (w.ranged) {
+            projectiles.push({
+              x: f.x, y: f.y,
+              vx: Math.cos(ang) * 9, vy: Math.sin(ang) * 9,
+              team: f.team, dmg: f.power * w.dmgMult, color: w.color, life: 90,
+            });
+          } else {
+            dealDamage(enemy, f.power * w.dmgMult, f.x, f.y, w.knock);
+          }
+        }
+      } else {
+        // Sin enemigos: deambular suave
+        f.vx += rand(-0.1, 0.1);
+        f.vy += rand(-0.1, 0.1);
+      }
+
+      // Separacion para evitar amontonarse
+      for (const o of fighters) {
+        if (o === f || o.hp <= 0) continue;
+        const dx = f.x - o.x, dy = f.y - o.y;
+        const d2 = dx * dx + dy * dy;
+        const minD = f.radius + o.radius;
+        if (d2 > 0 && d2 < minD * minD) {
+          const d = Math.sqrt(d2);
+          const push = (minD - d) / minD;
+          f.vx += (dx / d) * push * 0.6;
+          f.vy += (dy / d) * push * 0.6;
+        }
+      }
+
+      f.vx *= 0.86; f.vy *= 0.86;
+      f.x += f.vx; f.y += f.vy;
+      f.x = clamp(f.x, f.radius, W - f.radius);
+      f.y = clamp(f.y, f.radius + 60, H - f.radius);
+    }
+
+    function updateProjectiles() {
+      for (const p of projectiles) {
+        p.x += p.vx; p.y += p.vy; p.life--;
+        for (const o of fighters) {
+          if (o.hp <= 0 || o.team === p.team) continue;
+          if ((o.x - p.x) ** 2 + (o.y - p.y) ** 2 < (o.radius + 5) ** 2) {
+            dealDamage(o, p.dmg, p.x - p.vx, p.y - p.vy, 3);
+            p.life = 0; break;
+          }
+        }
+      }
+      projectiles = projectiles.filter(p => p.life > 0 && p.x > -20 && p.x < W + 20 && p.y > -20 && p.y < H + 20);
+    }
+
+    function updateMeteors() {
+      for (const m of meteors) {
+        if (m.delay > 0) { m.delay--; continue; }
+        m.y += m.vy; m.vy += 0.4;
+        if (m.y >= m.targetY && !m.exploded) {
+          m.exploded = true; m.t = 1;
+          for (const o of fighters) {
+            if (o.hp <= 0) continue;
+            if (m.team && o.team !== m.team) continue;
+            if ((o.x - m.x) ** 2 + (o.y - m.y) ** 2 < m.radius ** 2) {
+              dealDamage(o, m.dmg, m.x, m.y - 50, 6);
+            }
+          }
+          for (let i = 0; i < 24; i++) {
+            particles.push({ x: m.x, y: m.y, vx: rand(-6, 6), vy: rand(-7, 1), t: 1, color: i % 2 ? '#ff8c42' : '#ffd166' });
+          }
+        }
+      }
+      meteors = meteors.filter(m => !(m.exploded && m.t <= 0));
+      for (const m of meteors) if (m.exploded) m.t -= 0.05;
+    }
+
+    function applyEffect(data) {
+      const target = data.target || 'all';
+      const inTarget = (f) => target === 'all' || f.team === target;
+
+      if (data.effect === 'heal') {
+        for (const f of fighters) {
+          if (f.hp > 0 && inTarget(f)) {
+            const amt = Math.round(f.maxHp * 0.35 * (data.intensity || 1));
+            f.hp = Math.min(f.maxHp, f.hp + amt);
+            f.flash = 6;
+            floaters.push({ x: f.x, y: f.y - f.radius, text: '+' + amt, t: 1, color: '#4ade80' });
+          }
+        }
+      } else { // meteor
+        const team = target === 'A' || target === 'B' ? target : null;
+        const count = Math.round(8 * (data.intensity || 1));
+        for (let i = 0; i < count; i++) {
+          const tx = team === 'A' ? rand(40, W * 0.45) : team === 'B' ? rand(W * 0.55, W - 40) : rand(40, W - 40);
+          meteors.push({
+            x: tx, y: -rand(40, 300), vy: rand(4, 8),
+            targetY: rand(H * 0.3, H * 0.85), radius: rand(60, 95),
+            dmg: rand(25, 50) * (data.intensity || 1), team,
+            delay: i * 6, exploded: false, t: 0,
+          });
+        }
+      }
+    }
+
+    // ---- Render ----
+    function drawFighter(f) {
+      const t = f.lunge || 0;
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      const s = f.spawnT > 0 ? (1 - f.spawnT) : 1;
+      ctx.scale(s, s);
+
+      // Sombra/halo de equipo
+      ctx.beginPath();
+      ctx.arc(0, 0, f.radius + 3, 0, Math.PI * 2);
+      ctx.fillStyle = f.flash > 0 ? '#ffffff' : TEAM_COLOR[f.team];
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // Cuerpo
+      ctx.beginPath();
+      ctx.arc(0, 0, f.radius, 0, Math.PI * 2);
+      ctx.closePath();
+      if (f.avatar && f.avatar.ok) {
+        ctx.save(); ctx.clip();
+        ctx.drawImage(f.avatar.img, -f.radius, -f.radius, f.radius * 2, f.radius * 2);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = f.tint;
+        ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,.55)';
+        ctx.font = `bold ${f.radius}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText((f.name[0] || '?').toUpperCase(), 0, 1);
+      }
+
+      // Emoji de arma
+      ctx.font = `${f.radius * 0.9}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const wEmoji = { fist: '👊', sword: '🗡️', hammer: '🔨', bow: '🏹' }[f.weapon] || '👊';
+      ctx.fillText(wEmoji, f.radius * 0.7 + t, -f.radius * 0.6);
+
+      ctx.restore();
+
+      // Barra de HP
+      const bw = Math.max(30, f.radius * 2);
+      const bx = f.x - bw / 2, by = f.y - f.radius - 12;
+      ctx.fillStyle = 'rgba(0,0,0,.5)';
+      ctx.fillRect(bx, by, bw, 5);
+      ctx.fillStyle = TEAM_COLOR[f.team];
+      ctx.fillRect(bx, by, bw * clamp(f.hp / f.maxHp, 0, 1), 5);
+
+      // Nombre
+      ctx.fillStyle = 'rgba(255,255,255,.92)';
+      ctx.font = '600 11px Segoe UI, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 4;
+      ctx.fillText(f.name, f.x, by - 2);
+      ctx.shadowBlur = 0;
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, W, H);
+
+      // Meteoros (estela)
+      for (const m of meteors) {
+        if (m.delay > 0) continue;
+        if (!m.exploded) {
+          ctx.beginPath();
+          ctx.moveTo(m.x, m.y);
+          ctx.lineTo(m.x - m.vy * 0.6, m.y - m.vy * 3);
+          ctx.strokeStyle = '#ff8c42'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+          ctx.stroke();
+          ctx.beginPath(); ctx.arc(m.x, m.y, 9, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffd166'; ctx.fill();
+        } else if (m.t > 0) {
+          ctx.beginPath(); ctx.arc(m.x, m.y, m.radius * (1 - m.t) + 10, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255,140,66,${m.t * 0.45})`; ctx.fill();
+        }
+      }
+
+      for (const f of fighters) if (f.hp > 0) drawFighter(f);
+
+      // Proyectiles
+      for (const p of projectiles) {
+        ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = p.color; ctx.fill();
+      }
+
+      // Particulas
+      for (const pt of particles) {
+        ctx.globalAlpha = clamp(pt.t, 0, 1);
+        ctx.fillStyle = pt.color;
+        ctx.fillRect(pt.x, pt.y, 4, 4);
+      }
+      ctx.globalAlpha = 1;
+
+      // Numeros flotantes
+      for (const fl of floaters) {
+        ctx.globalAlpha = clamp(fl.t, 0, 1);
+        ctx.fillStyle = fl.color;
+        ctx.font = 'bold 16px Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(fl.text, fl.x, fl.y);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function updateParticles() {
+      for (const pt of particles) { pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.15; pt.t -= 0.03; }
+      particles = particles.filter(p => p.t > 0);
+      for (const fl of floaters) { fl.y -= 0.7; fl.t -= 0.02; }
+      floaters = floaters.filter(f => f.t > 0);
+    }
+
+    function checkWinner() {
+      if (roundOver || !spawnedAny) return;
+      const { a, b } = teamCounts();
+      if (a + b === 0) return;
+      if (a === 0 || b === 0) {
+        roundOver = true;
+        const winner = a > 0 ? 'A' : 'B';
+        showBanner((winner === 'A' ? '🟦 Equipo Azul' : '🟥 Equipo Rojo') + ' gana!');
+        bannerTimer = 240; // ~4s a 60fps
+      }
+    }
+
+    function showBanner(text) {
+      bannerEl.textContent = text;
+      bannerEl.classList.add('show');
+    }
+    function hideBanner() { bannerEl.classList.remove('show'); }
+
+    function resetRound() {
+      fighters = []; projectiles = []; particles = []; floaters = []; meteors = [];
+      spawnedAny = false; roundOver = false; bannerTimer = 0;
+      hideBanner();
+    }
+
+    // ---- Loop ----
+    function loop() {
+      for (const f of fighters) if (f.hp > 0) updateFighter(f);
+      fighters = fighters.filter(f => f.hp > 0 || f.spawnT > 0);
+      updateProjectiles();
+      updateMeteors();
+      updateParticles();
+      checkWinner();
+
+      if (bannerTimer > 0) {
+        bannerTimer--;
+        if (bannerTimer === 0) resetRound();
+      }
+
+      const { a, b } = teamCounts();
+      countAEl.textContent = a; countBEl.textContent = b;
+
+      render();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // ---- Socket.io (mismo origen que sirve el overlay = backend) ----
+    if (!DEMO && typeof io !== 'undefined') {
+      const socket = io(); // conecta al origen actual (http://localhost:3000)
+      socket.on('connect', () => { connEl.classList.add('on'); connText.textContent = 'conectado'; });
+      socket.on('disconnect', () => { connEl.classList.remove('on'); connText.textContent = 'desconectado'; });
+
+      socket.on('battle:spawn', (d) => spawnFighter({
+        name: d.actor?.name, avatarUrl: d.actor?.avatarUrl,
+        hp: d.hp, power: d.power, weapon: d.weapon, team: d.team, tint: d.tint,
+      }));
+      socket.on('battle:effect', (d) => applyEffect(d));
+      socket.on('battle:control', (d) => { if (d.action === 'reset' || d.action === 'round') resetRound(); });
+    } else {
+      connText.textContent = 'modo demo';
+      connEl.classList.add('on');
+    }
+
+    // ---- Modo demo ----
+    if (DEMO) {
+      const names = ['Axel', 'Luna', 'Kai', 'Mia', 'Zed', 'Nova', 'Rex', 'Iris', 'Dax', 'Vera'];
+      const weapons = ['fist', 'sword', 'hammer', 'bow'];
+      function demoSpawn() {
+        spawnFighter({
+          name: names[(Math.random() * names.length) | 0],
+          hp: rand(60, 220), power: rand(8, 32),
+          weapon: weapons[(Math.random() * weapons.length) | 0],
+        });
+      }
+      for (let i = 0; i < 6; i++) demoSpawn();
+      setInterval(() => { if (!roundOver) demoSpawn(); }, 1600);
+      setInterval(() => {
+        if (roundOver) return;
+        if (Math.random() < 0.5) applyEffect({ effect: 'meteor', target: 'all', intensity: 1 });
+        else applyEffect({ effect: 'heal', target: Math.random() < 0.5 ? 'A' : 'B', intensity: 1 });
+      }, 7000);
+    }
+  })();
+  </script>
+</body>
+</html>

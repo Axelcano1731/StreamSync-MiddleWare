@@ -1,6 +1,8 @@
 import { getConfig } from '../config/alertConfig.js';
 import { searchAndPlay, skipTrack, getCurrentTrack, getSpotifyStatus } from './spotifyService.js';
 import { dispatchWebhooks } from './webhookService.js';
+import { handleMinecraftActions } from './minecraftActionsService.js';
+import { handleEvent as handleAvatarBattle } from './avatarBattleService.js';
 
 /**
  * Event Engine — Processes stream events through configurable rules
@@ -350,6 +352,20 @@ export function processEvent(eventType, data) {
   });
 
   syncGoalProgress(eventType, data);
+
+  // Puente Bedrock Box: dispara comandos de Minecraft segun los gifts/eventos.
+  // Va antes del check de alertas para que los comandos corran aunque la alerta
+  // visual este apagada.
+  handleMinecraftActions(eventType, data).catch((err) => {
+    console.warn('Error en acciones de Minecraft:', err.message);
+  });
+
+  // Avatar Battle: traduce gifts/likes en acciones del juego (overlay web).
+  try {
+    handleAvatarBattle(eventType, data);
+  } catch (err) {
+    console.warn('Error en Avatar Battle:', err.message);
+  }
 
   if (!alertConfig.enabled) return;
 
