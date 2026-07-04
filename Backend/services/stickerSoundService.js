@@ -30,6 +30,16 @@ export function setStickerSound(giftName, config) {
   return sounds;
 }
 
+// Actualiza solo algunos campos (volumen, enabled, cooldownSec, label) sin
+// reenviar el audio. No crea el registro si no existe.
+export function updateStickerSound(giftName, partial) {
+  const sounds = load();
+  if (!sounds[giftName]) return sounds;
+  sounds[giftName] = { ...sounds[giftName], ...partial };
+  save(sounds);
+  return sounds;
+}
+
 export function deleteStickerSound(giftName) {
   const sounds = load();
   delete sounds[giftName];

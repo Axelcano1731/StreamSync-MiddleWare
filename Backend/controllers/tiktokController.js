@@ -6,6 +6,7 @@ import {
   refreshAvailableGifts,
   setConnection,
   disconnectConnection,
+  getConnection,
   getGiftMap
 } from "../services/tiktokService.js";
 import { processEvent, resetGoalProgress } from "../services/eventEngine.js";
@@ -145,8 +146,19 @@ export async function connectToTikTok(username, io, isReconnect = false) {
 
     setConnection(connection, username);
 
+    // ¿Esta conexión sigue siendo la ACTIVA? Si el dashboard (o una reconexión)
+    // creó otra conexión después, ésta quedó obsoleta. Una conexión obsoleta NO
+    // debe emitir eventos (causaba TTS/alertas DOBLES) ni disparar reconexiones.
+    const isStale = () => getConnection() !== connection;
+
     // ====== ESTADO ======
     connection.on(ControlEvent.CONNECTED, async (state) => {
+      // Zombi: si mientras conectaba se creó otra conexión, ciérrala y sal.
+      if (isStale()) {
+        console.warn(`♻️ Conexión duplicada a @${username} descartada (había otra activa)`);
+        try { connection.disconnect(); } catch { /* noop */ }
+        return;
+      }
       console.log(`🔗 Conectado a @${username} | Room ID: ${state.roomId}`);
       reconnectAttempts = 0; // Reset on successful connect
       await refreshAvailableGifts();
@@ -156,6 +168,9 @@ export async function connectToTikTok(username, io, isReconnect = false) {
     });
 
     connection.on(ControlEvent.DISCONNECTED, () => {
+      // Si esta conexión ya fue reemplazada, ignora su desconexión: ni emitas
+      // "offline" ni programes reconexión (evita conexiones fantasma).
+      if (isStale()) return;
       console.warn("🔌 Desconectado de TikTok Live");
       endSession();
       resetGoalProgress();
@@ -164,6 +179,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
     });
 
     connection.on(ControlEvent.STREAM_END, ({ action }) => {
+      if (isStale()) return;
       console.log("📴 El stream ha finalizado:", action);
       endSession();
       resetGoalProgress();
@@ -172,6 +188,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
 
     // ====== CHAT ======
     connection.on(WebcastEvent.CHAT, (data) => {
+      if (isStale()) return;
       const user = data.user?.uniqueId ?? "Usuario desconocido";
       const comment = (data.comment ?? "").replace(/\s+/g, " ").trim();
       const profilePic = cacheAndGetPic(data.user);
@@ -193,23 +210,42 @@ export async function connectToTikTok(username, io, isReconnect = false) {
             .filter((s) => s.emoteId || s.emoteImage)
         : [];
 
+      // Identidad del usuario respecto al streamer. OJO: en tiktok-live-connector
+      // v2 NO viene en data.user (isModerator/isSubscriber ya no existen ahí),
+      // sino en data.userIdentity.*OfAnchor. Dejamos fallbacks por si cambia el
+      // shape en el futuro.
+      const identity = data.userIdentity || {};
+      const fansClubLevel =
+        Number(data.user?.fansClub?.data?.level) ||
+        Number(data.user?.fansClubInfo?.fansLevel) ||
+        0;
+      const isMod = identity.isModeratorOfAnchor ?? data.user?.isModerator ?? false;
+      const isSub =
+        identity.isSubscriberOfAnchor ??
+        data.user?.subscribeInfo?.isSubscribedToAnchor ??
+        data.user?.isSubscribe ??
+        false;
+      const isFollowerOf = identity.isFollowerOfAnchor ?? data.user?.isFollower ?? false;
+
       const eventData = {
         uniqueId: user,
         comment,
         profilePic,
         stickers,
-        isModerator: data.user?.isModerator || data.isModerator || false,
-        isSubscriber: data.user?.isSubscriber || data.isSubscriber || false,
+        isModerator: isMod,
+        isSubscriber: isSub,
         badges,
-        topFanLevel: data.user?.topFanLevel ?? data.topFanLevel ?? 0,
-        followRole: data.user?.followRole ?? data.followRole ?? 0,
+        // topFanLevel = nivel del Club de Fans ("quiéreme"); 0 si no es miembro.
+        topFanLevel: fansClubLevel,
+        followRole: identity.isMutualFollowingWithAnchor ? 2 : isFollowerOf ? 1 : 0,
         teamMemberLevel: data.user?.teamMemberLevel ?? 0,
-        isFollower: data.user?.isFollower ?? false,
+        isFollower: isFollowerOf,
         fansClub: data.user?.fansClub ?? null,
       };
 
+      const idTag = `${isMod ? ' 🛡️MOD' : ''}${isSub ? ' ⭐SUB' : ''}${fansClubLevel ? ' 💖FAN' + fansClubLevel : ''}${isFollowerOf ? ' ➕FOLL' : ''}`;
       const stickerTag = stickers.length ? ` [+${stickers.length} sticker]` : '';
-      console.log(`💬 [CHAT] ${user}: ${comment}${stickerTag} | pic=${profilePic ? 'YES' : 'NULL(cache:' + profilePicCache.size + ')'}`);
+      console.log(`💬 [CHAT] ${user}:${idTag} ${comment}${stickerTag} | pic=${profilePic ? 'YES' : 'NULL(cache:' + profilePicCache.size + ')'}`);
       io.emit("chat", eventData);
       trackEvent('chat', eventData);
       processEvent('chat', eventData);
@@ -230,11 +266,12 @@ export async function connectToTikTok(username, io, isReconnect = false) {
         });
 
         const stickerSound = getStickerSoundForGift(key);
-        if (stickerSound) {
+        if (stickerSound && stickerSound.enabled !== false) {
           io.emit("stickerSound", {
             giftName: key,
             soundData: stickerSound.soundData,
             volume: stickerSound.volume,
+            cooldownSec: stickerSound.cooldownSec ?? null,
             uniqueId: user,
             profilePic,
           });
@@ -248,6 +285,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
 
     // ====== LIKE ======
     connection.on(WebcastEvent.LIKE, (data) => {
+      if (isStale()) return;
       const user = data.user?.uniqueId ?? "Usuario desconocido";
       const eventData = {
         uniqueId: user,
@@ -263,6 +301,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
 
     // ====== FOLLOW ======
     connection.on(WebcastEvent.FOLLOW, (data) => {
+      if (isStale()) return;
       const user = data.user?.uniqueId ?? "Usuario desconocido";
       const profilePic = cacheAndGetPic(data.user);
       const eventData = { uniqueId: user, profilePic };
@@ -275,6 +314,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
 
     // ====== SHARE ======
     connection.on(WebcastEvent.SHARE, (data) => {
+      if (isStale()) return;
       const user = data.user?.uniqueId ?? "Usuario desconocido";
       const eventData = { uniqueId: user };
 
@@ -284,25 +324,67 @@ export async function connectToTikTok(username, io, isReconnect = false) {
       processEvent('share', eventData);
     });
 
+    // ====== SUBSCRIBE (suscriptores) ======
+    if (WebcastEvent.SUBSCRIBE) {
+      connection.on(WebcastEvent.SUBSCRIBE, (data) => {
+        if (isStale()) return;
+        const user = data.user?.uniqueId ?? "Usuario desconocido";
+        const profilePic = cacheAndGetPic(data.user);
+        const eventData = { uniqueId: user, profilePic };
+
+        console.log(`⭐ [SUBSCRIBE] ${user} se suscribió`);
+        io.emit("subscribe", eventData);
+        trackEvent('subscribe', eventData);
+        processEvent('subscribe', eventData);
+      });
+    }
+
     // ====== GIFT ======
     connection.on(WebcastEvent.GIFT, async (data) => {
       try {
+        if (isStale()) return;
+        // Combo de regalos "streakable": TikTok manda un evento por cada
+        // repeticion mientras dura el combo. Ignoramos los frames intermedios y
+        // procesamos solo el final (repeatEnd truthy), cuyo repeatCount ya trae el
+        // TOTAL. Asi la alerta, el sonido, la voz, las stats y los comandos ocurren
+        // UNA sola vez por combo.
+        //
+        // OJO (v2): el indicador FIABLE de combo es data.giftDetails.combo (bool),
+        // NO data.giftType (no existe) ni data.giftDetails.giftType (esa es la
+        // CATEGORIA del regalo: Rose=1, Heart Me=4...). Ademas todos los frames de
+        // un combo comparten un groupId real (!= "0"); los regalos simples traen
+        // groupId "0". Verificado en vivo con volcado de datos.
+        const groupId = data.groupId != null ? String(data.groupId) : null;
+        const isStreak =
+          data.giftDetails?.combo === true || (groupId != null && groupId !== '0');
+
+        if (isStreak && data.repeatEnd != null && !data.repeatEnd) {
+          return;
+        }
+
+        // Categoria del regalo (se conserva por compatibilidad aguas abajo).
+        const giftType = data.giftDetails?.giftType ?? null;
+
         const giftId = data.giftId ?? data.gift?.giftId ?? data.gift?.id ?? data.gift_key;
         const repeatCount = data.repeatCount ?? 1;
         const userId = data.user?.uniqueId ?? "Usuario desconocido";
         const profilePic = cacheAndGetPic(data.user);
 
         const giftMap = getGiftMap();
-        let meta = data.extendedGiftInfo || data.gift || (giftId ? giftMap.get(String(giftId)) : null);
+        // Preferimos el catálogo (fetchAvailableGifts) por diamantes fiables; si no,
+        // usamos giftDetails que viene embebido en el propio mensaje (campos con
+        // otro naming: giftName/diamondCount/giftImage).
+        let meta = (giftId ? giftMap.get(String(giftId)) : null) || data.giftDetails || data.extendedGiftInfo || data.gift || null;
 
         if (!meta && giftId) {
           await refreshAvailableGifts();
           meta = giftMap.get(String(giftId));
         }
 
-        const name = meta?.name ?? data.giftName ?? "Gift sin nombre";
-        const cost = meta?.diamond_count ?? "N/D";
-        const giftImage = meta?.image?.url_list?.[0] ?? null;
+        const name = meta?.name ?? meta?.giftName ?? data.giftName ?? "Gift sin nombre";
+        const cost = Number(meta?.diamond_count ?? meta?.diamondCount ?? 0) || 0;
+        const giftImage =
+          meta?.image?.url_list?.[0] ?? meta?.giftImage?.url_list?.[0] ?? null;
 
         const eventData = {
           uniqueId: userId,
@@ -311,24 +393,29 @@ export async function connectToTikTok(username, io, isReconnect = false) {
           diamondCount: cost,
           giftImage,
           profilePic,
-          // Campos de streak para deduplicar combos aguas abajo (Avatar Battle).
+          // Campos de streak + IDs únicos para deduplicar combos y entregas
+          // repetidas aguas abajo (Avatar Battle, VS Battle).
           giftId: giftId ?? null,
-          giftType: data.giftType ?? null,
+          giftType,
+          isStreak,
           repeatEnd: data.repeatEnd ?? null,
+          groupId,
+          msgId: data.common?.msgId ?? null,
         };
 
-        console.log(`🎁 [GIFT] ${userId} → ${repeatCount}× ${name} • ${cost}💎`);
+        console.log(`🎁 [GIFT] ${userId} → ${repeatCount}× ${name} • ${cost}💎 ${isStreak ? '[combo' : '[single'} grp=${groupId} msg=${String(eventData.msgId ?? '').slice(-6)}]`);
         io.emit("gift", eventData);
         trackEvent('gift', eventData);
         processEvent('gift', eventData);
 
         // Emit sticker sound if configured
         const stickerSound = getStickerSoundForGift(name);
-        if (stickerSound) {
+        if (stickerSound && stickerSound.enabled !== false) {
           io.emit("stickerSound", {
             giftName: name,
             soundData: stickerSound.soundData,
             volume: stickerSound.volume,
+            cooldownSec: stickerSound.cooldownSec ?? null,
             uniqueId: userId,
             profilePic,
           });
@@ -341,6 +428,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
     // ====== EMOTE (stickers de chat / suscripción) ======
     connection.on(WebcastEvent.EMOTE, (data) => {
       try {
+        if (isStale()) return;
         const userId = data.user?.uniqueId ?? "Usuario desconocido";
         const profilePic = cacheAndGetPic(data.user);
 
@@ -375,11 +463,12 @@ export async function connectToTikTok(username, io, isReconnect = false) {
 
           // Reproducir sonido si este sticker tiene uno asignado (key = emoteId)
           const stickerSound = getStickerSoundForGift(eventData.emoteId);
-          if (stickerSound) {
+          if (stickerSound && stickerSound.enabled !== false) {
             io.emit("stickerSound", {
               giftName: eventData.emoteId,
               soundData: stickerSound.soundData,
               volume: stickerSound.volume,
+              cooldownSec: stickerSound.cooldownSec ?? null,
               uniqueId: userId,
               profilePic,
             });
@@ -394,6 +483,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
 
     // ====== MEMBER JOIN (new) ======
     connection.on(WebcastEvent.MEMBER, (data) => {
+      if (isStale()) return;
       const user = data.user?.uniqueId ?? "Usuario desconocido";
       const profilePic = cacheAndGetPic(data.user);
       const eventData = { uniqueId: user, profilePic, actionId: data.actionId };
@@ -406,6 +496,7 @@ export async function connectToTikTok(username, io, isReconnect = false) {
 
     // ====== ROOM USER (viewer count) ======
     connection.on(WebcastEvent.ROOM_USER, (data) => {
+      if (isStale()) return;
       const viewerCount = data.viewerCount ?? 0;
       console.log(`👁️ [VIEWERS] ${viewerCount} espectadores`);
       io.emit("roomUser", { viewerCount });

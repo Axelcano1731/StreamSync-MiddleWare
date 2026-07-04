@@ -3,6 +3,7 @@ import { searchAndPlay, skipTrack, getCurrentTrack, getSpotifyStatus } from './s
 import { dispatchWebhooks } from './webhookService.js';
 import { handleMinecraftActions } from './minecraftActionsService.js';
 import { handleEvent as handleAvatarBattle } from './avatarBattleService.js';
+import { handleAlertEvent } from './alertMediaService.js';
 
 /**
  * Event Engine — Processes stream events through configurable rules
@@ -367,6 +368,13 @@ export function processEvent(eventType, data) {
     console.warn('Error en Avatar Battle:', err.message);
   }
 
+  // Alertas visuales (imagen/GIF + sonido + texto) por evento.
+  try {
+    handleAlertEvent(eventType, data);
+  } catch (err) {
+    console.warn('Error en alertas visuales:', err.message);
+  }
+
   if (!alertConfig.enabled) return;
 
   if (eventType === 'gift' && alertConfig.minDiamonds > 0) {
@@ -386,19 +394,42 @@ export function processEvent(eventType, data) {
   }
 }
 
+// ¿El autor del comentario entra en el filtro de audiencia del lector de chat?
+// Si `everyone` está activo (o no hay config) se lee a cualquiera; en caso
+// contrario solo se lee a los grupos marcados. `fansClub` = insignia de fan
+// ("quiéreme", topFanLevel > 0).
+function passesTTSAudience(data, audience) {
+  if (!audience || audience.everyone) return true;
+  if (audience.moderators && data.isModerator) return true;
+  if (audience.subscribers && data.isSubscriber) return true;
+  if (audience.followers && ((data.followRole ?? 0) > 0 || data.isFollower)) return true;
+  if (audience.fansClub && ((data.topFanLevel ?? 0) > 0 || data.fansClub)) return true;
+  return false;
+}
+
 function buildTTSEvent(eventType, data, ttsConfig) {
   let text = '';
 
   switch (eventType) {
     case 'chat':
       if ((data.comment || '').startsWith('!')) return null;
+      if (!passesTTSAudience(data, ttsConfig.audience)) return null;
       text = ttsConfig.readUsername
         ? `${data.uniqueId} dice: ${data.comment}`
         : data.comment;
       break;
-    case 'gift':
-      text = `${data.uniqueId} envió ${data.repeatCount || 1} ${data.giftName || 'regalo'}`;
+    case 'gift': {
+      const count = data.repeatCount || 1;
+      const giftName = data.giftName || 'regalo';
+      const each = Number(data.diamondCount);
+      const totalCoins = Number.isFinite(each) ? each * count : 0;
+      let giftPart = `${count} ${giftName}`;
+      if (totalCoins > 0) {
+        giftPart += `, ${totalCoins} ${totalCoins === 1 ? 'moneda' : 'monedas'}`;
+      }
+      text = ttsConfig.readUsername ? `${data.uniqueId} envió ${giftPart}` : giftPart;
       break;
+    }
     case 'follow':
       text = `${data.uniqueId} te está siguiendo`;
       break;

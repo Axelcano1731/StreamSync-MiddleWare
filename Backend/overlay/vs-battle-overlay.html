@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamSync — VS Battle</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: transparent;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      user-select: none;
+      color: #fff;
+    }
+
+    #wrap {
+      position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+      width: min(560px, 96vw);
+      padding: 14px 16px 12px;
+      margin-top: 14px;
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(20,12,28,.82), rgba(12,8,18,.86));
+      box-shadow: 0 18px 50px rgba(0,0,0,.45), inset 0 0 0 1.5px rgba(255,255,255,.08);
+      backdrop-filter: blur(6px);
+    }
+
+    #title {
+      text-align: center; font-size: 13px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; opacity: .65; margin-bottom: 10px;
+    }
+    #title.hidden { display: none; }
+
+    /* Marcador de rondas ganadas ("Win a / b") */
+    #wins {
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      width: fit-content; margin: -2px auto 10px; padding: 4px 14px;
+      background: rgba(0,0,0,.42); border-radius: 999px;
+      font-size: 14px; font-weight: 900; letter-spacing: .5px;
+      box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.12);
+    }
+    #wins .wl { opacity: .8; font-size: 12px; font-weight: 800; letter-spacing: 1px; }
+    #wins #winA { color: var(--cA); text-shadow: 0 0 10px var(--cA); }
+    #wins #winB { color: var(--cB); text-shadow: 0 0 10px var(--cB); }
+    #wins .wsep { opacity: .5; font-weight: 700; }
+    #wins.hidden { display: none; }
+
+    /* Marcador */
+    #board { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+    .side {
+      flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 6px;
+      transition: transform .18s ease;
+    }
+    .side .icon-wrap {
+      position: relative; width: 96px; height: 96px; border-radius: 50%;
+      display: grid; place-items: center;
+      background: radial-gradient(circle at 50% 35%, rgba(255,255,255,.14), rgba(255,255,255,0));
+      box-shadow: inset 0 0 0 3px var(--c), 0 0 22px -6px var(--c);
+      transition: transform .18s cubic-bezier(.2,1.5,.4,1), box-shadow .25s ease;
+    }
+    .side .icon-wrap .emoji { font-size: 52px; line-height: 1; filter: drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+    .side .icon-wrap img { width: 78px; height: 78px; object-fit: contain; border-radius: 50%; filter: drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+    .side .label {
+      font-size: 14px; font-weight: 800; max-width: 150px; text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      text-shadow: 0 2px 6px rgba(0,0,0,.6);
+    }
+    .side .count {
+      font-size: 46px; font-weight: 900; line-height: 1; color: var(--c);
+      text-shadow: 0 3px 10px rgba(0,0,0,.55), 0 0 18px var(--c);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .side.bump { transform: translateY(-4px); }
+    .side.bump .icon-wrap { transform: scale(1.12); box-shadow: inset 0 0 0 3px var(--c), 0 0 34px -2px var(--c); }
+    .side.leading .icon-wrap { box-shadow: inset 0 0 0 4px var(--c), 0 0 30px -4px var(--c); }
+    .side.leading .label::after { content: ' 👑'; }
+
+    /* Centro VS */
+    #center { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 64px; }
+    #vs {
+      font-size: 30px; font-weight: 900; font-style: italic;
+      background: linear-gradient(180deg, #fff, #ffd2ec);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      text-shadow: 0 2px 10px rgba(255,93,170,.4); letter-spacing: 1px;
+    }
+
+    /* Barra tira y afloja */
+    #bar {
+      position: relative; height: 12px; border-radius: 999px; margin-top: 12px; overflow: hidden;
+      background: var(--cB); box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
+    }
+    #barFill {
+      position: absolute; inset: 0 auto 0 0; width: 50%;
+      background: var(--cA);
+      transition: width .35s cubic-bezier(.3,1,.4,1);
+    }
+    #barKnob {
+      position: absolute; top: 50%; left: 50%; width: 3px; height: 20px;
+      transform: translate(-50%, -50%); background: rgba(255,255,255,.85);
+      border-radius: 2px; box-shadow: 0 0 6px rgba(0,0,0,.6);
+      transition: left .35s cubic-bezier(.3,1,.4,1);
+    }
+
+    /* Estado */
+    #status {
+      margin-top: 10px; text-align: center; font-size: 18px; font-weight: 900;
+      letter-spacing: 1px; min-height: 24px;
+      text-shadow: 0 2px 8px rgba(0,0,0,.6);
+    }
+
+    /* +N flotante */
+    .floater {
+      position: absolute; font-weight: 900; font-size: 26px; pointer-events: none;
+      animation: floatUp 1s ease-out forwards;
+      text-shadow: 0 2px 8px rgba(0,0,0,.7);
+    }
+    @keyframes floatUp {
+      0% { opacity: 0; transform: translateY(8px) scale(.7); }
+      20% { opacity: 1; transform: translateY(-2px) scale(1.1); }
+      100% { opacity: 0; transform: translateY(-46px) scale(1); }
+    }
+
+    /* Controles (solo ?control=1) */
+    #controls { display: none; gap: 8px; justify-content: center; margin-top: 12px; }
+    #controls.show { display: flex; }
+    #controls button {
+      font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+      color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+      padding: 6px 14px; border-radius: 999px;
+    }
+    #controls button:hover { background: rgba(255,255,255,.22); }
+
+    /* Conexión */
+    #conn {
+      position: fixed; bottom: 10px; right: 12px; display: flex; align-items: center; gap: 7px;
+      font-size: 11px; color: rgba(255,255,255,.65);
+      background: rgba(0,0,0,.4); padding: 5px 10px; border-radius: 999px;
+    }
+    #conn .dot { width: 9px; height: 9px; border-radius: 50%; background: #f04438; box-shadow: 0 0 8px #f04438; }
+    #conn.on .dot { background: #16d680; box-shadow: 0 0 8px #16d680; }
+    #conn.hidden { display: none; }
+
+    /* Ayuda de configuración */
+    #hint {
+      margin-top: 8px; text-align: center; font-size: 11px; color: rgba(255,255,255,.55); line-height: 1.5;
+    }
+    #hint.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="title">VS Battle</div>
+
+    <div id="wins">
+      <span class="wl">⚔️ WIN</span>
+      <b id="winA">0</b><span class="wsep">/</span><b id="winB">0</b>
+    </div>
+
+    <div id="board">
+      <div class="side" id="sideA">
+        <div class="icon-wrap"><span class="emoji" id="iconA">😈</span></div>
+        <div class="count" id="countA">0</div>
+        <div class="label" id="labelA">Lado A</div>
+      </div>
+
+      <div id="center"><div id="vs">VS</div></div>
+
+      <div class="side" id="sideB">
+        <div class="icon-wrap"><span class="emoji" id="iconB">😇</span></div>
+        <div class="count" id="countB">0</div>
+        <div class="label" id="labelB">Lado B</div>
+      </div>
+    </div>
+
+    <div id="bar"><div id="barFill"></div><div id="barKnob"></div></div>
+
+    <div id="status">EMPATE</div>
+
+    <div id="hint" class="hidden"></div>
+
+    <div id="controls">
+      <button id="btnReset">↺ Reiniciar</button>
+      <button id="btnDemo">▶ Demo</button>
+    </div>
+  </div>
+
+  <div id="conn"><span class="dot"></span><span id="conn-text">desconectado</span></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    const params = new URLSearchParams(location.search);
+    const DEMO_FLAG = params.get('demo') === '1';
+    const CONTROL = params.get('control') === '1';
+
+    // ------- utilidades -------
+    const $ = (id) => document.getElementById(id);
+    function norm(s) {
+      return String(s || '')
+        .toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '') // quita acentos
+        .trim();
+    }
+    function toNum(v, d = 0) { const n = Number(v); return Number.isFinite(n) ? n : d; }
+
+    // ------- estado -------
+    // Config recibida del backend (config.vsBattle). Mientras no llegue, no se cuenta.
+    let CFG = null;
+    let byId = new Map();    // String(giftId) -> 'A' | 'B'
+    let byName = new Map();  // nombre normalizado -> 'A' | 'B'
+    let sig = '';            // firma de la batalla (para persistir/limpiar conteo)
+    let scoreA = 0, scoreB = 0;
+    let demoOn = DEMO_FLAG;
+    const seenGifts = new Map(); // dedupe de combos (streaks)
+
+    const root = document.documentElement;
+
+    function setIcon(wrapSide, value, fallbackEmoji) {
+      const wrap = $(wrapSide === 'A' ? 'sideA' : 'sideB').querySelector('.icon-wrap');
+      const isImg = value && (/^(https?:)?\/\//.test(value) || value.startsWith('data:'));
+      if (isImg) {
+        const img = new Image();
+        img.src = value; img.alt = '';
+        img.onerror = () => { wrap.replaceChildren(Object.assign(document.createElement('span'), { className: 'emoji', textContent: fallbackEmoji })); };
+        wrap.replaceChildren(img);
+      } else {
+        wrap.replaceChildren(Object.assign(document.createElement('span'), { className: 'emoji', textContent: value || fallbackEmoji }));
+      }
+    }
+
+    // ------- aplicar configuración -------
+    function applyConfig(full) {
+      const vb = (full && full.vsBattle) || {};
+      const sideA = vb.sideA || {};
+      const sideB = vb.sideB || {};
+
+      CFG = {
+        enabled: vb.enabled !== false,
+        title: vb.title != null ? vb.title : 'VS Battle',
+        by: (vb.by || 'count') === 'diamonds' ? 'diamonds' : 'count',
+        colorA: sideA.color || '#5ad7ff',
+        colorB: sideB.color || '#ff5da6',
+        labelA: sideA.label || 'Lado A',
+        labelB: sideB.label || 'Lado B',
+        giftsA: Array.isArray(sideA.gifts) ? sideA.gifts : [],
+        giftsB: Array.isArray(sideB.gifts) ? sideB.gifts : [],
+      };
+
+      // Mapas de coincidencia
+      byId = new Map(); byName = new Map();
+      const index = (gifts, side) => {
+        for (const g of gifts) {
+          if (g == null) continue;
+          if (g.id != null && String(g.id).trim()) byId.set(String(g.id).trim(), side);
+          const nm = norm(g.name);
+          if (nm) byName.set(nm, side);
+        }
+      };
+      index(CFG.giftsA, 'A');
+      index(CFG.giftsB, 'B');
+
+      // Estilos / textos
+      root.style.setProperty('--cA', CFG.colorA);
+      root.style.setProperty('--cB', CFG.colorB);
+      $('sideA').style.setProperty('--c', CFG.colorA);
+      $('sideB').style.setProperty('--c', CFG.colorB);
+      $('labelA').textContent = CFG.labelA;
+      $('labelB').textContent = CFG.labelB;
+
+      const t = $('title');
+      if (CFG.title) { t.textContent = CFG.title; t.classList.remove('hidden'); }
+      else t.classList.add('hidden');
+
+      // Íconos: primera imagen de regalo configurada en cada lado. Si no hay
+      // imagen, se usa el emoji por defecto: 😈 (lado A / "malos" = Rosas) y
+      // 😇 (lado B / "buenos" = GG).
+      const firstImg = (gifts) => { for (const g of gifts) if (g && g.image) return g.image; return null; };
+      setIcon('A', firstImg(CFG.giftsA), '😈');
+      setIcon('B', firstImg(CFG.giftsB), '😇');
+
+      // Marcador de rondas ganadas (persistido en config).
+      renderWins(vb.wins);
+
+      // Firma de la batalla: si cambia (otros regalos / modo), arrancamos en 0.
+      const newSig = JSON.stringify({
+        a: CFG.giftsA.map((g) => String(g.id ?? norm(g.name))).sort(),
+        b: CFG.giftsB.map((g) => String(g.id ?? norm(g.name))).sort(),
+        by: CFG.by,
+      });
+      if (newSig !== sig) {
+        sig = newSig;
+        loadScores();
+      }
+
+      updateHint();
+      render();
+    }
+
+    // ------- persistencia -------
+    function storeKey() { return 'ss_vs_' + btoa(unescape(encodeURIComponent(sig))).slice(0, 28); }
+    function saveScores() { try { localStorage.setItem(storeKey(), JSON.stringify({ a: scoreA, b: scoreB })); } catch {} }
+    function loadScores() {
+      scoreA = 0; scoreB = 0;
+      try { const raw = localStorage.getItem(storeKey()); if (raw) { const d = JSON.parse(raw); scoreA = d.a | 0; scoreB = d.b | 0; } } catch {}
+    }
+
+    // ------- render -------
+    function renderWins(wins) {
+      const a = Math.max(0, toNum(wins && wins.a, 0));
+      const b = Math.max(0, toNum(wins && wins.b, 0));
+      $('winA').textContent = a;
+      $('winB').textContent = b;
+    }
+
+    function render() {
+      $('countA').textContent = scoreA;
+      $('countB').textContent = scoreB;
+
+      const total = scoreA + scoreB;
+      const pct = total === 0 ? 50 : (scoreA / total) * 100;
+      $('barFill').style.width = pct + '%';
+      $('barKnob').style.left = pct + '%';
+
+      $('sideA').classList.toggle('leading', scoreA > scoreB);
+      $('sideB').classList.toggle('leading', scoreB > scoreA);
+
+      const st = $('status');
+      if (scoreA === scoreB) {
+        st.style.color = '#fff';
+        st.textContent = 'EMPATE';
+      } else {
+        const aWins = scoreA > scoreB;
+        const name = aWins ? (CFG ? CFG.labelA : 'A') : (CFG ? CFG.labelB : 'B');
+        const diff = Math.abs(scoreA - scoreB);
+        st.style.color = aWins ? (CFG ? CFG.colorA : '#fff') : (CFG ? CFG.colorB : '#fff');
+        st.textContent = `${name} GANANDO +${diff}`;
+      }
+    }
+
+    function bump(side, amount) {
+      const el = $(side === 'A' ? 'sideA' : 'sideB');
+      el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+      setTimeout(() => el.classList.remove('bump'), 220);
+
+      const fl = document.createElement('div');
+      fl.className = 'floater';
+      fl.textContent = '+' + amount;
+      fl.style.color = side === 'A' ? CFG.colorA : CFG.colorB;
+      const rect = el.getBoundingClientRect();
+      fl.style.left = (rect.left + rect.width / 2 - 14) + 'px';
+      fl.style.top = (rect.top + 18) + 'px';
+      document.body.appendChild(fl);
+      setTimeout(() => fl.remove(), 1000);
+    }
+
+    function addScore(side, amount) {
+      if (amount <= 0) return;
+      if (side === 'A') scoreA += amount; else scoreB += amount;
+      bump(side, amount);
+      render();
+      saveScores();
+    }
+
+    function reset() { scoreA = 0; scoreB = 0; render(); saveScores(); }
+
+    // ------- pista de configuración -------
+    function updateHint() {
+      const h = $('hint');
+      if (!CFG) return;
+      const noGifts = CFG.giftsA.length === 0 && CFG.giftsB.length === 0;
+      if (!CFG.enabled) {
+        h.textContent = 'VS Battle desactivado en el panel.';
+        h.classList.remove('hidden');
+      } else if (noGifts) {
+        h.innerHTML = 'Configura los regalos de cada lado en <b>Overlays › VS Battle</b>.';
+        h.classList.remove('hidden');
+      } else {
+        h.classList.add('hidden');
+      }
+    }
+
+    // ------- manejo de regalos -------
+    function sideForGift(data) {
+      if (data.giftId != null) {
+        const s = byId.get(String(data.giftId).trim());
+        if (s) return s;
+      }
+      const s = byName.get(norm(data.giftName));
+      return s || null;
+    }
+
+    function handleGift(data = {}) {
+      if (!CFG || !CFG.enabled) return;
+      const side = sideForGift(data);
+      if (!side) return; // solo cuentan los regalos configurados
+
+      const repeat = Math.max(1, toNum(data.repeatCount, 1));
+
+      // Combo/streak: groupId real (!= "0") lo comparten TODOS los frames del
+      // combo; el backend ya lo marca con isStreak. Solo cuenta el frame final
+      // (repeatEnd truthy) para no sumar cada repeticion.
+      const groupId =
+        data.groupId != null && String(data.groupId) !== '0' ? String(data.groupId) : null;
+      const isStreak = data.isStreak === true || groupId != null || data.giftType === 1;
+      if (isStreak && data.repeatEnd != null && !data.repeatEnd) return;
+
+      // Dedupe idempotente. Para combos la clave es el groupId (compartido por
+      // todos los frames) — así una entrega repetida del combo NO vuelve a sumar.
+      // Para regalos simples usamos el msgId único de cada evento.
+      const dedupeId = groupId
+        ? 'g:' + groupId
+        : (data.msgId ? 'm:' + data.msgId
+          : `${data.uniqueId || 'anon'}:${data.giftId ?? data.giftName}:${repeat}`);
+      const now = Date.now();
+      const prev = seenGifts.get(dedupeId);
+      if (prev && now - prev < 15000) return;
+      seenGifts.set(dedupeId, now);
+
+      const amount = CFG.by === 'diamonds' ? toNum(data.diamondCount, 0) * repeat : repeat;
+      addScore(side, amount);
+    }
+
+    // ------- controles -------
+    if (CONTROL) $('controls').classList.add('show');
+    $('btnReset').addEventListener('click', reset);
+    $('btnDemo').addEventListener('click', () => { demoOn ? stopDemo() : startDemo(); });
+    window.addEventListener('keydown', (e) => { if (e.key === 'r' || e.key === 'R') reset(); });
+
+    // ------- socket.io -------
+    const connEl = $('conn');
+    const connText = $('conn-text');
+    if (CONTROL) connEl.classList.remove('hidden');
+
+    if (!DEMO_FLAG && typeof io !== 'undefined') {
+      const socket = io(); // mismo origen = backend
+      socket.on('connect', () => {
+        connEl.classList.add('on'); connText.textContent = 'conectado';
+        socket.emit('getAlertConfig', (cfg) => { if (cfg) applyConfig(cfg); });
+      });
+      socket.on('disconnect', () => { connEl.classList.remove('on'); connText.textContent = 'desconectado'; });
+      socket.on('alertConfig', (cfg) => { if (cfg) applyConfig(cfg); });
+      socket.on('gift', handleGift);
+      socket.on('vsBattle:control', (d) => { if (d && (d.action === 'reset' || d.action === 'round')) reset(); });
+      socket.on('vsBattle:wins', (w) => renderWins(w));
+    } else {
+      connText.textContent = 'modo demo';
+      connEl.classList.add('on');
+    }
+
+    // ------- demo -------
+    let demoTimer = null;
+    function startDemo() {
+      demoOn = true;
+      if (!CFG) {
+        applyConfig({ vsBattle: {
+          enabled: true, title: 'VS Battle (demo)', by: 'count',
+          sideA: { label: 'Rosa', color: '#5ad7ff', gifts: [{ id: null, name: 'Rose', image: null }] },
+          sideB: { label: 'GG', color: '#ff5da6', gifts: [{ id: null, name: 'GG', image: null }] },
+        }});
+      }
+      demoTimer = setInterval(() => {
+        const toA = Math.random() < 0.5;
+        const g = toA ? (CFG.giftsA[0] || { name: 'Rose' }) : (CFG.giftsB[0] || { name: 'GG' });
+        handleGift({
+          uniqueId: 'demo' + ((Math.random() * 999) | 0),
+          giftId: g.id ?? null, giftName: g.name,
+          repeatCount: 1 + ((Math.random() * 4) | 0),
+          diamondCount: toA ? 1 : 5, giftType: 0, repeatEnd: 1,
+        });
+      }, 1100);
+    }
+    function stopDemo() { demoOn = false; if (demoTimer) clearInterval(demoTimer); demoTimer = null; }
+    if (DEMO_FLAG) startDemo();
+
+    // limpieza periódica del dedupe
+    setInterval(() => {
+      const now = Date.now();
+      for (const [k, ts] of seenGifts) if (now - ts > 60000) seenGifts.delete(k);
+    }, 30000);
+
+    render();
+  })();
+  </script>
+</body>
+</html>

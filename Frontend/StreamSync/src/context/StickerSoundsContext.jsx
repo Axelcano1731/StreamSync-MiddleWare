@@ -20,11 +20,19 @@ export function StickerSoundsProvider({ children }) {
     const v = parseFloat(localStorage.getItem("stickerCooldownSec"));
     return Number.isFinite(v) ? v : 5;
   });
+  // Anti-ráfaga global: tiempo mínimo entre CUALQUIER par de sonidos. Evita que
+  // un mensaje con muchos stickers distintos los reproduzca todos a la vez.
+  const [minGapSec, setMinGapSec] = useState(() => {
+    const v = parseFloat(localStorage.getItem("stickerMinGapSec"));
+    return Number.isFinite(v) ? v : 1.5;
+  });
 
   const lastPlayedRef = useRef({}); // { [stickerKey]: timestamp } para el cooldown
+  const lastAnyPlayedRef = useRef(0); // timestamp del último sonido (cualquiera)
   // Refs frescas para leerlas dentro del listener (que se registra una sola vez).
   const antiSpamRef = useRef(antiSpam);
   const cooldownRef = useRef(cooldownSec);
+  const minGapRef = useRef(minGapSec);
 
   useEffect(() => {
     antiSpamRef.current = antiSpam;
@@ -34,6 +42,10 @@ export function StickerSoundsProvider({ children }) {
     cooldownRef.current = cooldownSec;
     localStorage.setItem("stickerCooldownSec", String(cooldownSec));
   }, [cooldownSec]);
+  useEffect(() => {
+    minGapRef.current = minGapSec;
+    localStorage.setItem("stickerMinGapSec", String(minGapSec));
+  }, [minGapSec]);
 
   // Listeners globales: se registran una vez al arrancar la app y siguen vivos
   // mientras cambias de pestaña, así el directo nunca se queda sin sonidos.
@@ -68,20 +80,29 @@ export function StickerSoundsProvider({ children }) {
       });
     };
 
-    const handleStickerSound = ({ giftName: key, soundData, volume: vol }) => {
+    const handleStickerSound = ({ giftName: key, soundData, volume: vol, cooldownSec: itemCd }) => {
       setLastTriggered(key);
       setTimeout(() => setLastTriggered(null), 2000);
       if (!soundData) return;
 
-      // Anti-spam: si está activo, no repetir el sonido del mismo sticker
-      // hasta que pase el cooldown (cubre la misma persona spameando en
-      // varios mensajes seguidos, o varias personas con el mismo sticker).
-      if (antiSpamRef.current) {
-        const now = Date.now();
-        const last = lastPlayedRef.current[key] || 0;
-        if (now - last < cooldownRef.current * 1000) return;
-        lastPlayedRef.current[key] = now;
+      const now = Date.now();
+
+      // 1) Anti-ráfaga global (siempre): nunca dos sonidos casi a la vez. Esto
+      // evita que un mensaje con muchos stickers distintos suene todo de golpe.
+      if (minGapRef.current > 0 && now - lastAnyPlayedRef.current < minGapRef.current * 1000) {
+        return;
       }
+
+      // 2) Cooldown por sticker (si anti-spam activo): no repetir el mismo
+      // sticker hasta que pase su cooldown propio (o el global por defecto).
+      if (antiSpamRef.current) {
+        const cd = (itemCd == null ? cooldownRef.current : itemCd) * 1000;
+        const last = lastPlayedRef.current[key] || 0;
+        if (now - last < cd) return;
+      }
+
+      lastPlayedRef.current[key] = now;
+      lastAnyPlayedRef.current = now;
 
       const audio = new Audio(soundData);
       audio.volume =
@@ -107,6 +128,8 @@ export function StickerSoundsProvider({ children }) {
     setAntiSpam,
     cooldownSec,
     setCooldownSec,
+    minGapSec,
+    setMinGapSec,
   };
 
   return (

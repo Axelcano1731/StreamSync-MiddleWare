@@ -58,6 +58,27 @@ const PLACEMENTS = [
   "bottom-right",
 ];
 
+const VS_OVERLAY_URL = `${BACKEND_URL}/overlay/vs-battle-overlay.html`;
+
+const VS_CHIP = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  background: "var(--bg-input)",
+  border: "1px solid var(--border-subtle)",
+  borderRadius: 999,
+  padding: "3px 6px 3px 8px",
+  fontSize: "0.78em",
+};
+const VS_CHIP_X = {
+  background: "transparent",
+  border: "none",
+  color: "var(--text-muted)",
+  cursor: "pointer",
+  fontSize: "0.9em",
+  lineHeight: 1,
+};
+
 function createEmptyPreset() {
   return {
     id: "",
@@ -101,6 +122,15 @@ export default function OverlayPanel() {
   const [customCSS, setCustomCSS] = useState("");
   const [feedback, setFeedback] = useState("");
 
+  // ----- VS Battle -----
+  const [availableGifts, setAvailableGifts] = useState([]);
+  const [vsDraft, setVsDraft] = useState(null);
+  const [vsTarget, setVsTarget] = useState("A");
+  const [vsSearch, setVsSearch] = useState("");
+  const [vsCopied, setVsCopied] = useState(false);
+  const [vsPreview, setVsPreview] = useState(false);
+  const [vsWins, setVsWins] = useState({ a: 0, b: 0 });
+
   useEffect(() => {
     socket.emit("getAlertConfig", (cfg) => {
       setConfig(cfg);
@@ -118,14 +148,40 @@ export default function OverlayPanel() {
       setConfig((prev) => (prev ? { ...prev, goals } : prev));
     };
 
+    const handleVsWins = (w) =>
+      setVsWins({ a: Number(w?.a) || 0, b: Number(w?.b) || 0 });
+
     socket.on("alertConfig", handleConfig);
     socket.on("goalProgress", handleGoalProgress);
+    socket.on("vsBattle:wins", handleVsWins);
 
     return () => {
       socket.off("alertConfig", handleConfig);
       socket.off("goalProgress", handleGoalProgress);
+      socket.off("vsBattle:wins", handleVsWins);
     };
   }, []);
+
+  // Sincroniza el marcador de wins desde la config (valor persistido).
+  useEffect(() => {
+    const w = config?.vsBattle?.wins;
+    if (w) setVsWins({ a: Number(w.a) || 0, b: Number(w.b) || 0 });
+  }, [config?.vsBattle?.wins?.a, config?.vsBattle?.wins?.b]);
+
+  // Catálogo de regalos de TikTok (con imágenes) para el selector del VS Battle.
+  useEffect(() => {
+    fetch(`${BACKEND_URL}/api/sticker-sounds/available-gifts`)
+      .then((r) => r.json())
+      .then((d) => Array.isArray(d) && setAvailableGifts(d))
+      .catch(() => {});
+  }, []);
+
+  // Inicializa el borrador del VS Battle la primera vez que llega la config.
+  useEffect(() => {
+    if (config?.vsBattle && !vsDraft) {
+      setVsDraft(JSON.parse(JSON.stringify(config.vsBattle)));
+    }
+  }, [config?.vsBattle, vsDraft]);
 
   const presets = config?.overlay?.presets || [];
   const selectedPreset = useMemo(() => {
@@ -240,6 +296,90 @@ export default function OverlayPanel() {
     });
   };
 
+  // ----- VS Battle: helpers -----
+  const sameGift = (a, b) => {
+    if (a.id != null && b.id != null) return String(a.id) === String(b.id);
+    return String(a.name || "").toLowerCase().trim() === String(b.name || "").toLowerCase().trim();
+  };
+
+  const giftSide = (gift) => {
+    if (!vsDraft) return null;
+    const e = { id: gift.id != null ? String(gift.id) : null, name: gift.name };
+    if ((vsDraft.sideA.gifts || []).some((g) => sameGift(g, e))) return "A";
+    if ((vsDraft.sideB.gifts || []).some((g) => sameGift(g, e))) return "B";
+    return null;
+  };
+
+  // Asignar/quitar un regalo al lado activo (un regalo solo puede estar en un lado).
+  const vsAssignGift = (gift) => {
+    setVsDraft((prev) => {
+      if (!prev) return prev;
+      const d = JSON.parse(JSON.stringify(prev));
+      const entry = {
+        id: gift.id != null ? String(gift.id) : null,
+        name: gift.name,
+        image: gift.image || null,
+      };
+      const targetKey = vsTarget === "A" ? "sideA" : "sideB";
+      const already = (d[targetKey].gifts || []).some((g) => sameGift(g, entry));
+      d.sideA.gifts = (d.sideA.gifts || []).filter((g) => !sameGift(g, entry));
+      d.sideB.gifts = (d.sideB.gifts || []).filter((g) => !sameGift(g, entry));
+      if (!already) d[targetKey].gifts.push(entry);
+      return d;
+    });
+  };
+
+  const vsRemoveGift = (sideKey, entry) => {
+    setVsDraft((prev) => {
+      if (!prev) return prev;
+      const d = JSON.parse(JSON.stringify(prev));
+      d[sideKey].gifts = (d[sideKey].gifts || []).filter((g) => !sameGift(g, entry));
+      return d;
+    });
+  };
+
+  const vsUpdateSide = (sideKey, field, value) => {
+    setVsDraft((prev) =>
+      prev ? { ...prev, [sideKey]: { ...prev[sideKey], [field]: value } } : prev
+    );
+  };
+
+  const vsUpdateField = (field, value) => {
+    setVsDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
+  };
+
+  const handleSaveVsBattle = () => {
+    if (!vsDraft) return;
+    socket.emit("updateAlertConfig", { section: "vsBattle", config: vsDraft });
+    setFeedback("VS Battle guardado.");
+  };
+
+  const handleResetVsBattle = () => {
+    socket.emit("vsBattleControl", "reset");
+    setFeedback("Marcador del VS reiniciado.");
+  };
+
+  // Wins (rondas ganadas): ajuste manual. Optimista + confirmación del backend.
+  const adjustWin = (side, delta) => {
+    setVsWins((prev) => {
+      const key = side === "A" ? "a" : "b";
+      return { ...prev, [key]: Math.max(0, (prev[key] || 0) + delta) };
+    });
+    socket.emit("vsBattleWins", { side, delta });
+  };
+
+  const resetWins = () => {
+    setVsWins({ a: 0, b: 0 });
+    socket.emit("vsBattleWins", { reset: true });
+  };
+
+  const vsCatalog = (() => {
+    const q = vsSearch.trim().toLowerCase();
+    let list = availableGifts;
+    if (q) list = list.filter((g) => (g.name || "").toLowerCase().includes(q));
+    return list.slice(0, 80);
+  })();
+
   if (!config) {
     return (
       <div className="page-enter">
@@ -277,6 +417,383 @@ export default function OverlayPanel() {
           ) : null}
         </div>
       </div>
+
+      {vsDraft ? (
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <div className="panel-title">⚔️ VS Battle — Marcador de Regalos</div>
+              <div className="panel-subtitle">
+                Elige qué regalo suma a cada lado. El marcador solo aumenta con esos regalos.
+              </div>
+            </div>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={vsDraft.enabled !== false}
+                onChange={(e) => vsUpdateField("enabled", e.target.checked)}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+
+          {/* Ajustes generales */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label>Título</label>
+              <input
+                className="input-field"
+                value={vsDraft.title || ""}
+                onChange={(e) => vsUpdateField("title", e.target.value)}
+                placeholder="VS Battle"
+              />
+            </div>
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label>Cómo cuenta</label>
+              <select
+                className="select-field"
+                value={vsDraft.by || "count"}
+                onChange={(e) => vsUpdateField("by", e.target.value)}
+              >
+                <option value="count">Por regalo (suma el combo)</option>
+                <option value="diamonds">Por diamantes</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Editores de cada lado */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            {["sideA", "sideB"].map((sideKey) => {
+              const s = vsDraft[sideKey];
+              const letter = sideKey === "sideA" ? "A" : "B";
+              return (
+                <div key={sideKey} className="alert-config-card">
+                  <div className="alert-config-header">
+                    <div className="alert-config-title">
+                      <span style={{ color: s.color }}>■</span> Lado {letter}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                    <div className="input-group" style={{ marginBottom: 0, flex: 1 }}>
+                      <label>Nombre</label>
+                      <input
+                        className="input-field"
+                        value={s.label || ""}
+                        onChange={(e) => vsUpdateSide(sideKey, "label", e.target.value)}
+                      />
+                    </div>
+                    <div className="input-group" style={{ marginBottom: 0, width: 70 }}>
+                      <label>Color</label>
+                      <input
+                        className="input-field"
+                        type="color"
+                        value={s.color || "#ffffff"}
+                        onChange={(e) => vsUpdateSide(sideKey, "color", e.target.value)}
+                        style={{ padding: 6, width: 70 }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "0.78em", color: "var(--text-muted)", marginBottom: 6 }}>
+                    Regalos asignados ({(s.gifts || []).length})
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 34 }}>
+                    {(s.gifts || []).length ? (
+                      s.gifts.map((g, i) => (
+                        <span key={(g.id || g.name) + "-" + i} style={VS_CHIP}>
+                          <VsGiftThumb image={g.image} name={g.name} />
+                          {g.name}
+                          <button
+                            onClick={() => vsRemoveGift(sideKey, g)}
+                            style={VS_CHIP_X}
+                            title="Quitar"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: "0.78em", color: "var(--text-muted)" }}>
+                        Sin regalos. Elígelos abajo.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Selector de regalos del catálogo */}
+          <div className="alert-config-card">
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                marginBottom: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ fontSize: "0.82em", color: "var(--text-secondary)" }}>
+                Click en un regalo para asignarlo a:
+              </span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  className="btn"
+                  style={{
+                    padding: "4px 12px",
+                    ...(vsTarget === "A"
+                      ? { background: vsDraft.sideA.color, color: "#000", fontWeight: 700 }
+                      : {}),
+                  }}
+                  onClick={() => setVsTarget("A")}
+                >
+                  Lado A
+                </button>
+                <button
+                  className="btn"
+                  style={{
+                    padding: "4px 12px",
+                    ...(vsTarget === "B"
+                      ? { background: vsDraft.sideB.color, color: "#000", fontWeight: 700 }
+                      : {}),
+                  }}
+                  onClick={() => setVsTarget("B")}
+                >
+                  Lado B
+                </button>
+              </div>
+            </div>
+
+            <input
+              type="text"
+              className="input-field"
+              placeholder="🔍 Buscar regalo por nombre..."
+              value={vsSearch}
+              onChange={(e) => setVsSearch(e.target.value)}
+              style={{ marginBottom: 10 }}
+            />
+
+            {availableGifts.length ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(76px, 1fr))",
+                  gap: 8,
+                  maxHeight: 240,
+                  overflowY: "auto",
+                }}
+              >
+                {vsCatalog.map((g) => {
+                  const side = giftSide(g);
+                  const sideColor =
+                    side === "A" ? vsDraft.sideA.color : side === "B" ? vsDraft.sideB.color : null;
+                  return (
+                    <button
+                      key={g.id || g.name}
+                      onClick={() => vsAssignGift(g)}
+                      title={g.name}
+                      style={{
+                        position: "relative",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "8px 4px",
+                        borderRadius: 10,
+                        cursor: "pointer",
+                        background: "var(--bg-input)",
+                        border: `1px solid ${sideColor || "var(--border-subtle)"}`,
+                      }}
+                    >
+                      {side ? (
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            fontSize: "0.62em",
+                            fontWeight: 800,
+                            color: "#000",
+                            background: sideColor,
+                            borderRadius: 6,
+                            padding: "1px 5px",
+                          }}
+                        >
+                          {side}
+                        </span>
+                      ) : null}
+                      <VsGiftThumb image={g.image} name={g.name} large />
+                      <span
+                        style={{
+                          fontSize: "0.68em",
+                          textAlign: "center",
+                          color: "var(--text-secondary)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: "100%",
+                        }}
+                      >
+                        {g.name}
+                      </span>
+                      {g.diamondCount != null ? (
+                        <span style={{ fontSize: "0.62em", color: "var(--text-muted)" }}>
+                          💎{g.diamondCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="empty-state" style={{ padding: "18px 0" }}>
+                <div className="empty-state-icon">🎁</div>
+                <div className="empty-state-text">
+                  Conéctate a tu TikTok Live para cargar el catálogo de regalos.
+                  Mientras tanto puedes agregarlos por nombre aquí abajo.
+                </div>
+              </div>
+            )}
+
+            <ManualGiftAdder target={vsTarget} onAdd={(name) => vsAssignGift({ id: null, name, image: null })} />
+          </div>
+
+          {/* URL + acciones */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              background: "var(--bg-input)",
+              padding: "8px 10px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--border-subtle)",
+              margin: "14px 0 10px",
+            }}
+          >
+            <code
+              style={{
+                flex: 1,
+                color: "var(--accent-secondary)",
+                fontSize: "0.76em",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {VS_OVERLAY_URL}
+            </code>
+            <button
+              className="btn"
+              style={{ padding: "4px 10px" }}
+              onClick={() => {
+                navigator.clipboard.writeText(VS_OVERLAY_URL);
+                setVsCopied(true);
+                setTimeout(() => setVsCopied(false), 1800);
+              }}
+            >
+              {vsCopied ? "✓" : "📋"}
+            </button>
+          </div>
+
+          {/* Wins: marcador de rondas ganadas por lado (ajuste manual) */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 18,
+              flexWrap: "wrap",
+              marginBottom: 14,
+              padding: "10px 14px",
+              background: "var(--bg-secondary, rgba(255,255,255,.03))",
+              borderRadius: "var(--radius-sm, 8px)",
+            }}
+          >
+            <span style={{ fontSize: "0.8em", color: "var(--text-muted)", fontWeight: 700, letterSpacing: 1 }}>
+              ⚔️ WINS
+            </span>
+            {[
+              { side: "A", label: vsDraft.sideA?.label || "Lado A", color: vsDraft.sideA?.color, val: vsWins.a },
+              { side: "B", label: vsDraft.sideB?.label || "Lado B", color: vsDraft.sideB?.color, val: vsWins.b },
+            ].map((s) => (
+              <div key={s.side} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: s.color, fontWeight: 800, minWidth: 40 }}>{s.label}</span>
+                <button
+                  className="btn"
+                  style={{ padding: "2px 10px", fontSize: "1.1em", lineHeight: 1 }}
+                  onClick={() => adjustWin(s.side, -1)}
+                  title="Restar una victoria"
+                >
+                  −
+                </button>
+                <span style={{ minWidth: 26, textAlign: "center", fontWeight: 900, fontSize: "1.2em" }}>
+                  {s.val}
+                </span>
+                <button
+                  className="btn"
+                  style={{ padding: "2px 10px", fontSize: "1.1em", lineHeight: 1 }}
+                  onClick={() => adjustWin(s.side, 1)}
+                  title="Sumar una victoria"
+                >
+                  +
+                </button>
+              </div>
+            ))}
+            <button className="btn" style={{ padding: "4px 10px", fontSize: "0.8em" }} onClick={resetWins}>
+              Reiniciar wins
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn btn-primary" onClick={handleSaveVsBattle}>
+              Guardar VS Battle
+            </button>
+            <button className="btn" onClick={() => setVsPreview((v) => !v)}>
+              {vsPreview ? "Cerrar Preview" : "Preview"}
+            </button>
+            <button className="btn btn-danger" onClick={handleResetVsBattle}>
+              Reiniciar marcador
+            </button>
+          </div>
+
+          <div style={{ fontSize: "0.75em", color: "var(--text-muted)", marginTop: 8 }}>
+            Tamaño sugerido en OBS: 560×320 (Browser Source). Guarda los cambios para
+            que el overlay los tome al instante.
+          </div>
+
+          {vsPreview ? (
+            <div
+              style={{
+                marginTop: 12,
+                background: "#101018",
+                borderRadius: "var(--radius-sm)",
+                overflow: "hidden",
+                height: 220,
+              }}
+            >
+              <iframe
+                src={`${VS_OVERLAY_URL}?control=1`}
+                title="Preview VS Battle"
+                style={{ width: "100%", height: "100%", border: "none" }}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -821,6 +1338,57 @@ export default function OverlayPanel() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Miniatura de regalo con fallback a emoji si la imagen falla o no existe.
+function VsGiftThumb({ image, name, large }) {
+  const [failed, setFailed] = useState(false);
+  const size = large ? 40 : 20;
+  if (!image || failed) {
+    return (
+      <span style={{ fontSize: large ? 28 : 16 }} role="img" aria-label={name || "regalo"}>
+        🎁
+      </span>
+    );
+  }
+  return (
+    <img
+      src={image}
+      alt={name || ""}
+      width={size}
+      height={size}
+      style={{ objectFit: "contain" }}
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+// Alta manual de regalo por nombre (útil sin estar en vivo o para regalos sin catálogo).
+function ManualGiftAdder({ onAdd, target }) {
+  const [val, setVal] = useState("");
+  const submit = () => {
+    const n = val.trim();
+    if (!n) return;
+    onAdd(n);
+    setVal("");
+  };
+  return (
+    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+      <input
+        className="input-field"
+        placeholder={`Agregar regalo por nombre a Lado ${target} (ej. Rose)`}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+        }}
+      />
+      <button className="btn" onClick={submit}>
+        Agregar
+      </button>
     </div>
   );
 }

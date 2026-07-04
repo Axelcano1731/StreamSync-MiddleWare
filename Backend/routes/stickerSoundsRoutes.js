@@ -3,6 +3,7 @@ import express from 'express';
 import {
   getStickerSounds,
   setStickerSound,
+  updateStickerSound,
   deleteStickerSound,
 } from '../services/stickerSoundService.js';
 import { getAvailableGiftsList } from '../services/tiktokService.js';
@@ -20,7 +21,7 @@ router.get('/available-gifts', (_req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { giftName, fileName, soundData, volume, giftImage, label, type } = req.body;
+  const { giftName, fileName, soundData, volume, giftImage, label, type, cooldownSec } = req.body;
   if (!giftName || !soundData) {
     return res.status(400).json({ error: 'giftName y soundData son requeridos' });
   }
@@ -31,7 +32,25 @@ router.post('/', (req, res) => {
     giftImage: giftImage || null,
     label: label || null,
     type: type || 'gift',
+    enabled: true,
+    cooldownSec: Number.isFinite(Number(cooldownSec)) ? Number(cooldownSec) : null,
   });
+  res.json(updated);
+});
+
+// Edición parcial: volumen, activar/desactivar, cooldown propio, etiqueta.
+router.patch('/:giftName', (req, res) => {
+  const giftName = decodeURIComponent(req.params.giftName);
+  const { volume, enabled, cooldownSec, label } = req.body;
+  const partial = {};
+  if (volume !== undefined) partial.volume = Math.min(1, Math.max(0, Number(volume) || 0));
+  if (enabled !== undefined) partial.enabled = !!enabled;
+  if (cooldownSec !== undefined) {
+    partial.cooldownSec =
+      cooldownSec === null || cooldownSec === '' ? null : Math.max(0, Number(cooldownSec) || 0);
+  }
+  if (label !== undefined) partial.label = label;
+  const updated = updateStickerSound(giftName, partial);
   res.json(updated);
 });
 

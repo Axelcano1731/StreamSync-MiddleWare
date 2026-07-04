@@ -121,6 +121,16 @@ const DEFAULT_CONFIG = {
     blockedWords: [],
     readUsername: true,
     queueMode: 'fifo',
+    // Filtro de audiencia para la lectura de comentarios (chat).
+    // Si `everyone` está activo se lee a cualquiera; si no, solo a los grupos
+    // marcados. `fansClub` = insignia de fan / "quiéreme" (topFanLevel > 0).
+    audience: {
+      everyone: true,
+      moderators: false,
+      subscribers: false,
+      followers: false,
+      fansClub: false,
+    },
   },
   overlay: {
     position: 'top-right',
@@ -197,6 +207,26 @@ const DEFAULT_CONFIG = {
         { minDiamonds: 100, action: { type: 'effect', effect: 'meteor', target: 'all', intensity: 1 } },
       ],
       default: { type: 'avatar', hp: 80, power: 8, weapon: 'fist' },
+    },
+  },
+  vsBattle: {
+    enabled: true,
+    title: 'VS Battle',
+    by: 'diamonds', // 'diamonds' = suma monedas/diamantes del regalo · 'count' = suma el combo
+    // Marcador de rondas ganadas por cada lado ("Win a / b"). Se ajusta a mano
+    // desde el dashboard y se persiste aquí.
+    wins: { a: 0, b: 0 },
+    sideA: {
+      label: 'Rosa',
+      color: '#5ad7ff',
+      // gifts: lista de regalos que suman a este lado. Cada uno: { id, name, image }.
+      // Se asignan desde el dashboard (pestaña Overlays › VS Battle).
+      gifts: [{ id: null, name: 'Rose', image: null }],
+    },
+    sideB: {
+      label: 'GG',
+      color: '#ff5da6',
+      gifts: [{ id: null, name: 'GG', image: null }],
     },
   },
 };

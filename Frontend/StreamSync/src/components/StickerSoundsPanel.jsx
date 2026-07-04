@@ -15,6 +15,8 @@ export default function StickerSoundsPanel() {
     setAntiSpam,
     cooldownSec,
     setCooldownSec,
+    minGapSec,
+    setMinGapSec,
   } = useStickerSounds();
 
   // Estado local solo de configuración / UI de este panel.
@@ -149,6 +151,29 @@ export default function StickerSoundsPanel() {
       console.error("Error eliminando sticker sound:", err);
     }
   }, []);
+
+  // Actualización en local (instantánea) de un campo de un sticker.
+  const patchLocal = useCallback((key, partial) => {
+    setMappings((prev) => ({ ...prev, [key]: { ...prev[key], ...partial } }));
+  }, []);
+
+  // Persiste cambios parciales (volumen, enabled, cooldown) sin reenviar el audio.
+  const patchSound = useCallback(async (key, partial) => {
+    patchLocal(key, partial); // optimista
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/sticker-sounds/${encodeURIComponent(key)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(partial),
+        }
+      );
+      if (res.ok) setMappings(await res.json());
+    } catch (err) {
+      console.error("Error actualizando sticker sound:", err);
+    }
+  }, [patchLocal]);
 
   const handlePreview = useCallback((config) => {
     if (!config?.soundData) return;
@@ -361,7 +386,7 @@ export default function StickerSoundsPanel() {
             <div className="antispam-title">
               <span>🛡️ Anti-spam</span>
               <span className="antispam-sub">
-                Evita que un mismo sticker suene en ráfaga
+                Cooldown por sticker para que no suene en ráfaga
               </span>
             </div>
             <button
@@ -374,10 +399,30 @@ export default function StickerSoundsPanel() {
               <span className="toggle-knob" />
             </button>
           </div>
+
+          {/* Anti-ráfaga global: siempre activo (se puede poner en 0 para desactivar). */}
+          <div className="antispam-body">
+            <label className="form-label">
+              ⏳ Tiempo mínimo entre sonidos (cualquiera): {minGapSec}s
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="5"
+              step="0.5"
+              value={minGapSec}
+              onChange={(e) => setMinGapSec(parseFloat(e.target.value))}
+              className="volume-slider"
+            />
+            <span style={{ fontSize: "0.72em", color: "var(--text-muted)" }}>
+              Evita que un mensaje con muchos stickers suene todo de golpe. 0 = sin límite.
+            </span>
+          </div>
+
           {antiSpam && (
             <div className="antispam-body">
               <label className="form-label">
-                Espera entre sonidos del mismo sticker: {cooldownSec}s
+                Espera entre sonidos del mismo sticker (global): {cooldownSec}s
               </label>
               <input
                 type="range"
@@ -388,6 +433,9 @@ export default function StickerSoundsPanel() {
                 onChange={(e) => setCooldownSec(parseInt(e.target.value, 10))}
                 className="volume-slider"
               />
+              <span style={{ fontSize: "0.72em", color: "var(--text-muted)" }}>
+                Cada sticker puede tener su propio cooldown en la lista de "Configurados".
+              </span>
             </div>
           )}
         </div>
@@ -403,19 +451,91 @@ export default function StickerSoundsPanel() {
 
           {entries.length > 0 ? (
             <div className="sticker-list">
-              {entries.map(([key, cfg]) => (
+              {entries.map(([key, cfg]) => {
+                const enabled = cfg.enabled !== false;
+                return (
                 <div
                   key={key}
                   className={`sticker-item ${lastTriggered === key ? "sticker-triggered" : ""}`}
+                  style={{ opacity: enabled ? 1 : 0.55, alignItems: "flex-start" }}
                 >
                   <StickerThumb image={cfg.giftImage} name={cfg.label || key} />
-                  <div className="sticker-info">
+                  <div className="sticker-info" style={{ flex: 1 }}>
                     <span className="sticker-name">
                       {cfg.type === "emote" ? "🎟️ " : "🎁 "}
                       {cfg.label || key}
                     </span>
                     <span className="sticker-file">{cfg.fileName || "audio"}</span>
-                    <span className="sticker-vol">🔊 {Math.round((cfg.volume ?? 0.8) * 100)}%</span>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 10,
+                        marginTop: 6,
+                      }}
+                    >
+                      {/* Activar / silenciar */}
+                      <button
+                        onClick={() => patchSound(key, { enabled: !enabled })}
+                        title={enabled ? "Activado (click para silenciar)" : "Silenciado (click para activar)"}
+                        style={{
+                          cursor: "pointer",
+                          fontSize: "0.72em",
+                          fontWeight: 700,
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          border: "1px solid var(--border-subtle)",
+                          background: enabled ? "rgba(22,214,128,.18)" : "rgba(240,68,56,.16)",
+                          color: enabled ? "#16d680" : "#ff7a6b",
+                        }}
+                      >
+                        {enabled ? "🔊 Activo" : "🔇 Apagado"}
+                      </button>
+
+                      {/* Volumen */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 5 }} title="Volumen">
+                        <span style={{ fontSize: "0.72em" }}>🔊</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={cfg.volume ?? 0.8}
+                          onChange={(e) => patchLocal(key, { volume: parseFloat(e.target.value) })}
+                          onPointerUp={(e) => patchSound(key, { volume: parseFloat(e.target.value) })}
+                          onKeyUp={(e) => patchSound(key, { volume: parseFloat(e.target.value) })}
+                          style={{ width: 90 }}
+                        />
+                        <span style={{ fontSize: "0.7em", color: "var(--text-muted)", width: 34 }}>
+                          {Math.round((cfg.volume ?? 0.8) * 100)}%
+                        </span>
+                      </div>
+
+                      {/* Cooldown propio */}
+                      <div
+                        style={{ display: "flex", alignItems: "center", gap: 4 }}
+                        title="Cooldown propio en segundos. Vacío = usa el cooldown global."
+                      >
+                        <span style={{ fontSize: "0.72em" }}>⏱</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          placeholder="auto"
+                          value={cfg.cooldownSec ?? ""}
+                          onChange={(e) =>
+                            patchSound(key, {
+                              cooldownSec: e.target.value === "" ? null : Number(e.target.value),
+                            })
+                          }
+                          className="input-field"
+                          style={{ width: 60, padding: "2px 6px", fontSize: "0.78em" }}
+                        />
+                        <span style={{ fontSize: "0.7em", color: "var(--text-muted)" }}>s</span>
+                      </div>
+                    </div>
                   </div>
                   <div className="sticker-actions">
                     <button className="btn-icon" onClick={() => handlePreview(cfg)} title="Previsualizar">
@@ -426,7 +546,8 @@ export default function StickerSoundsPanel() {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="empty-state">

@@ -1,118 +1,189 @@
 // hooks/useSpeech.js
+//
+// Lector de chat (TTS) con voces neuronales. En vez de usar la Web Speech API
+// del navegador (que en Electron/Windows solo expone voces SAPI robóticas),
+// pide el audio MP3 al backend (/api/tts) generado con el motor neuronal de
+// Microsoft Edge y lo reproduce con un elemento <audio>.
 import { useState, useEffect, useCallback, useRef } from "react";
 import socket from "../services/socketService";
 
+const params = new URLSearchParams(window.location.search);
+const backendPort = params.get("backendPort") || "3000";
+const BACKEND_URL = `http://localhost:${backendPort}`;
+
+const STORAGE_KEY = "streamsync.ttsVoice";
+const MAX_QUEUE = 20;
+
 export const useSpeech = () => {
   const [voices, setVoices] = useState([]);
-  const [selectedVoice, setSelectedVoice] = useState(null);
+  const [selectedVoice, setSelectedVoiceState] = useState(null);
   const [enabled, setEnabled] = useState(true);
+
   const queueRef = useRef([]);
   const isSpeakingRef = useRef(false);
+  const audioRef = useRef(null);
+  // Refs espejo para leer el estado actual dentro de la cola sin recrear callbacks.
+  const selectedVoiceRef = useRef(null);
+  const enabledRef = useRef(true);
 
-  // Load available voices
   useEffect(() => {
-    const loadVoices = () => {
-      const available = speechSynthesis.getVoices();
-      setVoices(available);
-
-      if (!selectedVoice && available.length > 0) {
-        const defaultVoice =
-          available.find((v) => v.lang.startsWith("es")) || available[0];
-        setSelectedVoice(defaultVoice);
-      }
-    };
-
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
+    selectedVoiceRef.current = selectedVoice;
   }, [selectedVoice]);
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
 
-  // Process TTS queue
-  const processQueue = useCallback(() => {
-    if (isSpeakingRef.current || queueRef.current.length === 0 || !enabled) return;
+  const setSelectedVoice = useCallback((voice) => {
+    setSelectedVoiceState(voice);
+    if (voice?.shortName) {
+      try {
+        localStorage.setItem(STORAGE_KEY, voice.shortName);
+      } catch {
+        /* localStorage no disponible */
+      }
+    }
+  }, []);
+
+  // Cargar las voces neuronales del backend al montar.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${BACKEND_URL}/api/tts/voices`)
+      .then((r) => r.json())
+      .then((list) => {
+        if (cancelled || !Array.isArray(list)) return;
+        setVoices(list);
+
+        let savedName = null;
+        try {
+          savedName = localStorage.getItem(STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        const saved = savedName && list.find((v) => v.shortName === savedName);
+        const fallback =
+          list.find((v) => v.shortName === "es-MX-DaliaNeural") ||
+          list.find((v) => v.locale?.startsWith("es")) ||
+          list[0];
+        setSelectedVoiceState(saved || fallback || null);
+      })
+      .catch((err) =>
+        console.error("[tts] No se pudieron cargar las voces neuronales:", err)
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const stopCurrent = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      if (audio.src) URL.revokeObjectURL(audio.src);
+      audioRef.current = null;
+    }
+    isSpeakingRef.current = false;
+  }, []);
+
+  // Procesa la cola: pide el audio al backend y lo reproduce.
+  const playNext = useCallback(async () => {
+    if (isSpeakingRef.current || !enabledRef.current) return;
+    const voice = selectedVoiceRef.current;
+    if (!voice) return; // aún no hay voz; se reintenta al cargar/encolar
 
     const next = queueRef.current.shift();
+    if (!next) return;
+
     isSpeakingRef.current = true;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/tts/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: next.text,
+          voice: voice.shortName,
+          rate: next.rate ?? 1,
+          pitch: next.pitch ?? 1,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    const utterance = new SpeechSynthesisUtterance(next.text);
-    utterance.voice = selectedVoice;
-    utterance.pitch = next.pitch || 1;
-    utterance.rate = next.rate || 1;
-    utterance.volume = next.volume || 0.8;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.volume = next.volume ?? 0.8;
+      audioRef.current = audio;
 
-    utterance.onend = () => {
+      const done = () => {
+        URL.revokeObjectURL(url);
+        if (audioRef.current === audio) audioRef.current = null;
+        isSpeakingRef.current = false;
+        playNext();
+      };
+      audio.onended = done;
+      audio.onerror = done;
+      await audio.play();
+    } catch (err) {
+      console.error("[tts] Error reproduciendo:", err);
       isSpeakingRef.current = false;
-      processQueue();
-    };
+      playNext(); // no quedarse atascado por un fallo puntual
+    }
+  }, []);
 
-    utterance.onerror = () => {
-      isSpeakingRef.current = false;
-      processQueue();
-    };
+  const enqueue = useCallback(
+    (item) => {
+      if (!enabledRef.current || !item?.text?.trim()) return;
+      if (item.priority > 0) queueRef.current.unshift(item);
+      else queueRef.current.push(item);
+      if (queueRef.current.length > MAX_QUEUE) {
+        queueRef.current = queueRef.current.slice(0, MAX_QUEUE);
+      }
+      playNext();
+    },
+    [playNext]
+  );
 
-    speechSynthesis.speak(utterance);
-  }, [enabled, selectedVoice]);
-
-  // Listen for TTS events from backend
+  // Escuchar eventos TTS emitidos por el backend.
   useEffect(() => {
-    const handleTTS = (ttsEvent) => {
-      if (!enabled) return;
-
-      // Add to queue (priority items go first)
-      if (ttsEvent.priority > 0) {
-        queueRef.current.unshift(ttsEvent);
-      } else {
-        queueRef.current.push(ttsEvent);
-      }
-
-      // Keep queue manageable
-      if (queueRef.current.length > 20) {
-        queueRef.current = queueRef.current.slice(0, 20);
-      }
-
-      processQueue();
-    };
-
+    const handleTTS = (ttsEvent) => enqueue(ttsEvent);
     socket.on("tts", handleTTS);
     return () => socket.off("tts", handleTTS);
-  }, [enabled, processQueue]);
+  }, [enqueue]);
+
+  // Arrancar la cola en cuanto haya una voz seleccionada (p. ej. tras cargarlas).
+  useEffect(() => {
+    if (selectedVoice) playNext();
+  }, [selectedVoice, playNext]);
 
   const speak = useCallback(
     (text) => {
-      if (!enabled || !selectedVoice || !text?.trim()) return;
-
-      queueRef.current.push({ text, priority: 0 });
-
-      if (queueRef.current.length > 20) {
-        queueRef.current = queueRef.current.slice(0, 20);
-      }
-
-      processQueue();
+      enqueue({ text, priority: 0, rate: 1, pitch: 1, volume: 0.8 });
     },
-    [enabled, selectedVoice, processQueue]
+    [enqueue]
   );
 
   const skip = useCallback(() => {
-    speechSynthesis.cancel();
-    isSpeakingRef.current = false;
-    processQueue();
-  }, [processQueue]);
+    stopCurrent();
+    playNext();
+  }, [stopCurrent, playNext]);
 
   const clearQueue = useCallback(() => {
-    speechSynthesis.cancel();
     queueRef.current = [];
-    isSpeakingRef.current = false;
-  }, []);
+    stopCurrent();
+  }, [stopCurrent]);
 
   const toggleEnabled = useCallback(() => {
     setEnabled((prev) => {
-      if (prev) {
-        speechSynthesis.cancel();
+      const nextEnabled = !prev;
+      enabledRef.current = nextEnabled;
+      if (!nextEnabled) {
         queueRef.current = [];
-        isSpeakingRef.current = false;
+        stopCurrent();
       }
-      return !prev;
+      return nextEnabled;
     });
-  }, []);
+  }, [stopCurrent]);
 
   return {
     voices,

@@ -16,6 +16,7 @@ import {
 } from '../services/minecraftServerService.js';
 import { initAvatarBattle, controlBattle } from '../services/avatarBattleService.js';
 import { initMinecraftActions } from '../services/minecraftActionsService.js';
+import { initAlertMedia, emitAlertPreview } from '../services/alertMediaService.js';
 
 function emitConfig(io, config) {
   io.emit('alertConfig', config);
@@ -37,6 +38,7 @@ export default function socketHandler(io) {
   initEngine(io);
   initAvatarBattle(io);
   initMinecraftActions(io);
+  initAlertMedia(io);
   loadConfig();
   startSpotifyBroadcast();
 
@@ -130,10 +132,60 @@ export default function socketHandler(io) {
       }
     });
 
+    // Vista previa de las alertas visuales (imagen/GIF + sonido + texto).
+    socket.on('previewAlertMedia', (eventType, callback) => {
+      try {
+        const preview = emitAlertPreview(typeof eventType === 'string' ? eventType : 'gift');
+        if (typeof callback === 'function') callback({ ok: true, preview });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
+      }
+    });
+
     socket.on('battleControl', (action, callback) => {
       try {
         controlBattle(typeof action === 'string' ? action : 'reset');
         if (typeof callback === 'function') callback({ ok: true });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
+      }
+    });
+
+    // VS Battle (overlay de marcador): reinicia el conteo en todos los overlays.
+    socket.on('vsBattleControl', (action, callback) => {
+      try {
+        const act = typeof action === 'string' ? action : 'reset';
+        io.emit('vsBattle:control', { action: act });
+        io.of('/overlay').emit('vsBattle:control', { action: act });
+        if (typeof callback === 'function') callback({ ok: true });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
+      }
+    });
+
+    // VS Battle: marcador de rondas ganadas ("Win a / b"). Ajuste manual.
+    // Payload admitido: { side:'A'|'B', delta:+1|-1 } · { a, b } (absoluto) · { reset:true }.
+    socket.on('vsBattleWins', (payload, callback) => {
+      try {
+        const cur = getConfig().vsBattle?.wins || { a: 0, b: 0 };
+        let a = Number(cur.a) || 0;
+        let b = Number(cur.b) || 0;
+        const p = payload && typeof payload === 'object' ? payload : {};
+        if (p.reset) {
+          a = 0; b = 0;
+        } else if (p.side === 'A' || p.side === 'B') {
+          const delta = Number(p.delta) || 0;
+          if (p.side === 'A') a = Math.max(0, a + delta);
+          else b = Math.max(0, b + delta);
+        } else {
+          if (p.a != null) a = Math.max(0, Number(p.a) || 0);
+          if (p.b != null) b = Math.max(0, Number(p.b) || 0);
+        }
+        const updated = updateConfig('vsBattle', { wins: { a, b } });
+        const wins = updated.vsBattle.wins;
+        io.emit('vsBattle:wins', wins);
+        io.of('/overlay').emit('vsBattle:wins', wins);
+        if (typeof callback === 'function') callback({ ok: true, wins });
       } catch (error) {
         if (typeof callback === 'function') callback({ ok: false, error: error.message });
       }
