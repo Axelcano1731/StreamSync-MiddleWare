@@ -3,7 +3,9 @@ import socket from "../services/socketService";
 
 const params = new URLSearchParams(window.location.search);
 const backendPort = params.get('backendPort') || '3000';
-const BACKEND_URL = `http://localhost:${backendPort}`;
+// 127.0.0.1 (no "localhost"): el navegador de TikTok LIVE Studio conecta el
+// socket de forma fiable por 127.0.0.1, no siempre por localhost.
+const BACKEND_URL = `http://127.0.0.1:${backendPort}`;
 
 const BUILTIN_WIDGETS = [
   {

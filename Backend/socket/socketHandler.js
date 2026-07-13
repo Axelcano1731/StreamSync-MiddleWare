@@ -17,6 +17,7 @@ import {
 import { initAvatarBattle, controlBattle } from '../services/avatarBattleService.js';
 import { initMinecraftActions } from '../services/minecraftActionsService.js';
 import { initAlertMedia, emitAlertPreview } from '../services/alertMediaService.js';
+import { initEntrances, emitEntrancePreview } from '../services/entranceService.js';
 
 function emitConfig(io, config) {
   io.emit('alertConfig', config);
@@ -39,6 +40,7 @@ export default function socketHandler(io) {
   initAvatarBattle(io);
   initMinecraftActions(io);
   initAlertMedia(io);
+  initEntrances(io);
   loadConfig();
   startSpotifyBroadcast();
 
@@ -136,6 +138,16 @@ export default function socketHandler(io) {
     socket.on('previewAlertMedia', (eventType, callback) => {
       try {
         const preview = emitAlertPreview(typeof eventType === 'string' ? eventType : 'gift');
+        if (typeof callback === 'function') callback({ ok: true, preview });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
+      }
+    });
+
+    // Vista previa de una entrada de superfan (video + música por usuario).
+    socket.on('previewEntrance', (key, callback) => {
+      try {
+        const preview = emitEntrancePreview(typeof key === 'string' ? key : '*subscriber');
         if (typeof callback === 'function') callback({ ok: true, preview });
       } catch (error) {
         if (typeof callback === 'function') callback({ ok: false, error: error.message });

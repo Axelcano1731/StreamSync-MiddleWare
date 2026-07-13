@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { key: "chat", icon: "💬", label: "Chat" },
   { key: "stickers", icon: "🔊", label: "Sticker Sounds" },
   { key: "alerts", icon: "🔔", label: "Alertas" },
+  { key: "entrances", icon: "👑", label: "Entradas de Superfans" },
   { key: "events", icon: "📋", label: "Eventos" },
   { key: "overlay", icon: "🎨", label: "Overlays" },
   { key: "automation", icon: "🧩", label: "Automatización" },

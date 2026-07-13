@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamSync — Entradas de Superfans</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: transparent;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      user-select: none; color: #fff;
+    }
+
+    #stage {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .entrance {
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+      text-align: center; max-width: 96vw;
+    }
+
+    /* Video grande y centrado: es el protagonista de la entrada. */
+    .entrance-media {
+      max-width: 78vw; max-height: 70vh;
+      border-radius: 16px; overflow: hidden;
+    }
+    .entrance-media video {
+      max-width: 78vw; max-height: 70vh; object-fit: contain;
+      border-radius: 16px;
+      filter: drop-shadow(0 18px 46px rgba(0,0,0,.6));
+    }
+
+    /* Banner con avatar + nombre del superfan. */
+    .entrance-banner {
+      display: flex; align-items: center; gap: 14px;
+      background: rgba(10,10,20,.55);
+      backdrop-filter: blur(6px);
+      padding: 12px 24px; border-radius: 999px;
+      border: 2px solid var(--accent);
+      box-shadow: 0 0 30px var(--accent), 0 10px 30px rgba(0,0,0,.5);
+    }
+    .entrance-avatar {
+      width: 62px; height: 62px; border-radius: 50%;
+      object-fit: cover; border: 3px solid var(--accent);
+      box-shadow: 0 0 14px var(--accent);
+    }
+    .entrance-text { display: flex; flex-direction: column; align-items: flex-start; }
+    .entrance-title {
+      font-size: 40px; font-weight: 900; line-height: 1.05;
+      text-shadow: 0 3px 14px rgba(0,0,0,.7), 0 0 26px var(--accent);
+    }
+    .entrance-message {
+      font-size: 24px; font-weight: 700; opacity: .95;
+      text-shadow: 0 2px 10px rgba(0,0,0,.7); color: #ffe;
+    }
+
+    /* ---- Animaciones de entrada ---- */
+    .anim-pop      { animation: popIn .6s cubic-bezier(.2,1.5,.4,1) both; }
+    .anim-slideIn  { animation: slideIn .6s cubic-bezier(.2,1,.3,1) both; }
+    .anim-fadeIn   { animation: fadeIn .7s ease both; }
+    .anim-bounce   { animation: bounceIn .8s cubic-bezier(.2,1.6,.4,1) both; }
+    .anim-zoom     { animation: zoomIn .7s cubic-bezier(.2,1.3,.4,1) both; }
+    /* ---- Salida ---- */
+    .anim-out      { animation: fadeOut .5s ease forwards; }
+
+    @keyframes popIn   { 0% { opacity: 0; transform: scale(.5); } 100% { opacity: 1; transform: scale(1); } }
+    @keyframes slideIn { 0% { opacity: 0; transform: translateY(80px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn  { 0% { opacity: 0; } 100% { opacity: 1; } }
+    @keyframes bounceIn{ 0% { opacity: 0; transform: translateY(-120px); } 60% { opacity: 1; transform: translateY(16px);} 100% { transform: translateY(0);} }
+    @keyframes zoomIn  { 0% { opacity: 0; transform: scale(1.4); } 100% { opacity: 1; transform: scale(1); } }
+    @keyframes fadeOut { 0% { opacity: 1; } 100% { opacity: 0; transform: scale(.94); } }
+
+    #conn {
+      position: fixed; bottom: 10px; right: 12px; display: flex; align-items: center; gap: 7px;
+      font-size: 11px; color: rgba(255,255,255,.6);
+      background: rgba(0,0,0,.4); padding: 5px 10px; border-radius: 999px;
+    }
+    #conn.hidden { display: none; }
+    #conn .dot { width: 9px; height: 9px; border-radius: 50%; background: #f04438; box-shadow: 0 0 8px #f04438; }
+    #conn.on .dot { background: #16d680; box-shadow: 0 0 8px #16d680; }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="conn"><span class="dot"></span><span id="conn-text">desconectado</span></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    const BACKEND_URL = window.location.origin;
+    const params = new URLSearchParams(location.search);
+    const DEMO = params.get('demo') === '1';
+    const CONTROL = params.get('control') === '1';
+    const ACCENT = params.get('accent') || '#f5c542';
+    document.documentElement.style.setProperty('--accent', ACCENT);
+
+    const stage = document.getElementById('stage');
+    const connEl = document.getElementById('conn');
+    const connText = document.getElementById('conn-text');
+    if (!CONTROL) connEl.classList.add('hidden');
+
+    let configByKey = {};   // cache de la config (video/sound por clave)
+    let queue = [];
+    let busy = false;
+
+    function setConfig(all) { configByKey = all || {}; }
+
+    // Precarga vía REST (por si el overlay conecta después de configurar).
+    fetch(`${BACKEND_URL}/api/entrances`).then((r) => r.json()).then(setConfig).catch(() => {});
+
+    function enqueue(trigger) {
+      // Las entradas son largas: encolamos para que no se pisen entre sí.
+      queue.push(trigger);
+      if (!busy) next();
+    }
+
+    function next() {
+      if (queue.length === 0) { busy = false; return; }
+      busy = true;
+      show(queue.shift());
+    }
+
+    function show(t) {
+      const media = configByKey[t.key] || {};
+      const anim = t.animation || 'pop';
+      const duration = Math.max(2000, Number(t.duration) || 8000);
+      const vol = typeof t.volume === 'number' ? t.volume
+        : (typeof media.soundVolume === 'number' ? media.soundVolume : 0.8);
+
+      const el = document.createElement('div');
+      el.className = `entrance anim-${anim}`;
+
+      let videoEl = null;
+
+      // Video protagonista (trae su propio audio salvo que se silencie).
+      if (media.video) {
+        const wrap = document.createElement('div');
+        wrap.className = 'entrance-media';
+        videoEl = document.createElement('video');
+        videoEl.src = media.video;
+        videoEl.autoplay = true;
+        videoEl.loop = !!(t.loop ?? media.loop);
+        videoEl.playsInline = true;
+        videoEl.muted = !!(t.muteVideo ?? media.muteVideo);
+        videoEl.volume = Math.max(0, Math.min(1, vol));
+        wrap.appendChild(videoEl);
+        el.appendChild(wrap);
+      }
+
+      // Banner con avatar + nombre.
+      if (t.title || t.message || t.avatar) {
+        const banner = document.createElement('div');
+        banner.className = 'entrance-banner';
+        if (t.avatar) {
+          const img = document.createElement('img');
+          img.className = 'entrance-avatar';
+          img.src = t.avatar; img.alt = '';
+          img.onerror = () => img.remove();
+          banner.appendChild(img);
+        }
+        const txt = document.createElement('div');
+        txt.className = 'entrance-text';
+        if (t.title) {
+          const d = document.createElement('div'); d.className = 'entrance-title'; d.textContent = t.title; txt.appendChild(d);
+        }
+        if (t.message) {
+          const d = document.createElement('div'); d.className = 'entrance-message'; d.textContent = t.message; txt.appendChild(d);
+        }
+        banner.appendChild(txt);
+        el.appendChild(banner);
+      }
+
+      stage.appendChild(el);
+
+      // Música/sonido aparte (cacheado por clave). Útil para usar un video mudo
+      // + tu propia canción, o para reforzar el audio del video.
+      let audio = null;
+      if (media.sound) {
+        try {
+          audio = new Audio(media.sound);
+          audio.volume = Math.max(0, Math.min(1, vol));
+          audio.play().catch(() => {});
+        } catch {}
+      }
+
+      let done = false;
+      const finish = () => {
+        if (done) return; done = true;
+        try { if (audio) { audio.pause(); audio.currentTime = 0; } } catch {}
+        el.classList.add('anim-out');
+        setTimeout(() => { el.remove(); next(); }, 500);
+      };
+
+      if (videoEl && !(t.loop ?? media.loop)) {
+        // Video de una sola pasada: dura lo que dure el video (tope de seguridad).
+        videoEl.onended = finish;
+        setTimeout(finish, 120000);
+      } else {
+        // Video en bucle, o solo banner/música: dura lo configurado.
+        setTimeout(finish, duration);
+      }
+    }
+
+    // ---- Socket ----
+    if (!DEMO && typeof io !== 'undefined') {
+      const socket = io();
+      socket.on('connect', () => { connEl.classList.add('on'); connText.textContent = 'conectado'; });
+      socket.on('disconnect', () => { connEl.classList.remove('on'); connText.textContent = 'desconectado'; });
+      socket.on('entranceConfig', setConfig);
+      socket.on('entranceMedia', enqueue);
+    } else {
+      connText.textContent = 'modo demo';
+      connEl.classList.add('on');
+    }
+
+    // ---- Demo ----
+    if (DEMO) {
+      let i = 0;
+      const names = ['reyDelDirecto', 'superfan_01', 'sub_estrella'];
+      setInterval(() => {
+        enqueue({
+          key: '__demo__',
+          animation: ['pop', 'slideIn', 'bounce', 'zoom'][i % 4],
+          title: '👑 ¡Llegó ' + names[i % names.length] + '!',
+          message: 'Un superfan entró al directo',
+          avatar: null,
+          duration: 5000,
+          volume: 0.6,
+        });
+        i++;
+      }, 6000);
+    }
+  })();
+  </script>
+</body>
+</html>

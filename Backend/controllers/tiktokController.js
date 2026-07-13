@@ -486,9 +486,30 @@ export async function connectToTikTok(username, io, isReconnect = false) {
       if (isStale()) return;
       const user = data.user?.uniqueId ?? "Usuario desconocido";
       const profilePic = cacheAndGetPic(data.user);
-      const eventData = { uniqueId: user, profilePic, actionId: data.actionId };
 
-      console.log(`👋 [JOIN] ${user} se unió al directo`);
+      // Identidad respecto al streamer (para las Entradas de Superfans por defecto:
+      // "*subscriber" / "*superfan"). Igual que en CHAT, en v2 viene en
+      // data.userIdentity.*OfAnchor; dejamos fallbacks por si cambia el shape.
+      const identity = data.userIdentity || {};
+      const fansClubLevel =
+        Number(data.user?.fansClub?.data?.level) ||
+        Number(data.user?.fansClubInfo?.fansLevel) ||
+        0;
+      const isSub =
+        identity.isSubscriberOfAnchor ??
+        data.user?.subscribeInfo?.isSubscribedToAnchor ??
+        data.user?.isSubscribe ??
+        false;
+
+      const eventData = {
+        uniqueId: user,
+        profilePic,
+        actionId: data.actionId,
+        isSubscriber: isSub,
+        topFanLevel: fansClubLevel,
+      };
+
+      console.log(`👋 [JOIN] ${user} se unió al directo${isSub ? ' ⭐SUB' : ''}${fansClubLevel ? ' 💖FAN' + fansClubLevel : ''}`);
       io.emit("memberJoin", eventData);
       trackEvent('memberJoin', eventData);
       processEvent('memberJoin', eventData);

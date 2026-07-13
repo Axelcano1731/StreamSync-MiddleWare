@@ -4,6 +4,7 @@ import { dispatchWebhooks } from './webhookService.js';
 import { handleMinecraftActions } from './minecraftActionsService.js';
 import { handleEvent as handleAvatarBattle } from './avatarBattleService.js';
 import { handleAlertEvent } from './alertMediaService.js';
+import { handleEntranceEvent } from './entranceService.js';
 
 /**
  * Event Engine — Processes stream events through configurable rules
@@ -373,6 +374,13 @@ export function processEvent(eventType, data) {
     handleAlertEvent(eventType, data);
   } catch (err) {
     console.warn('Error en alertas visuales:', err.message);
+  }
+
+  // Entradas de Superfans (video + música por usuario al entrar/suscribirse).
+  try {
+    handleEntranceEvent(eventType, data);
+  } catch (err) {
+    console.warn('Error en entradas de superfans:', err.message);
   }
 
   if (!alertConfig.enabled) return;

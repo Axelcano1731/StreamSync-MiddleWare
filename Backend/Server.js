@@ -8,6 +8,7 @@ import socketHandler from './socket/socketHandler.js';
 import spotifyRoutes from './routes/spotifyRoutes.js';
 import stickerSoundsRoutes from './routes/stickerSoundsRoutes.js';
 import alertMediaRoutes from './routes/alertMediaRoutes.js';
+import entranceRoutes from './routes/entranceRoutes.js';
 import ttsRoutes from './routes/ttsRoutes.js';
 import { processEvent } from './services/eventEngine.js';
 import { controlBattle } from './services/avatarBattleService.js';
@@ -38,10 +39,11 @@ function createApp() {
   const app = express();
 
   app.use(cors());
-  // Límite amplio: sonidos/imágenes/videos de alertas se envían como data URL
-  // base64, que supera con facilidad el límite por defecto de 100 KB. Los videos
-  // cortos pueden pesar varios MB, por eso 50 MB.
-  app.use(express.json({ limit: '50mb' }));
+  // Límite amplio: sonidos/imágenes/videos de alertas y videos de entrada se
+  // envían como data URL base64, que supera con facilidad el límite por defecto
+  // de 100 KB. base64 infla el tamaño ~33%, y los videos de entrada suelen pesar
+  // más que una imagen de alerta, por eso 100 MB (permite archivos de ~75 MB).
+  app.use(express.json({ limit: '100mb' }));
 
   app.use('/overlay', express.static(path.join(__dirname, 'overlay')));
   app.use('/sounds', express.static(path.join(__dirname, 'sounds')));
@@ -50,6 +52,7 @@ function createApp() {
   app.use('/api/spotify', spotifyRoutes);
   app.use('/api/sticker-sounds', stickerSoundsRoutes);
   app.use('/api/alert-media', alertMediaRoutes);
+  app.use('/api/entrances', entranceRoutes);
   app.use('/api/tts', ttsRoutes);
 
   // Rutas de prueba locales (simular eventos sin live). Desactivar en produccion.

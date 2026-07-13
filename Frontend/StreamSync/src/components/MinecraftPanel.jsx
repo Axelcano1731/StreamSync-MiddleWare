@@ -230,7 +230,7 @@ export default function MinecraftPanel() {
   };
 
   const isRunning = !!minecraftStatus?.isRunning;
-  const OVERLAY_URL = "http://localhost:3000/overlay/minecraft-gifts-overlay.html";
+  const OVERLAY_URL = "http://127.0.0.1:3000/overlay/minecraft-gifts-overlay.html";
 
   // ── OP / modo de juego ──
   const makeOp = () => {

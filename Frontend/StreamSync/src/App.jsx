@@ -9,6 +9,7 @@ import StatsPanel from "./components/StatsPanel";
 import InteractionsPanel from "./components/InteractionsPanel";
 import ConnectPanel from "./components/ConnectPanel";
 import AlertsPanel from "./components/AlertsPanel";
+import EntrancesPanel from "./components/EntrancesPanel";
 import EventLog from "./components/EventLog";
 import OverlayPanel from "./components/OverlayPanel";
 import SpotifyPanel from "./components/SpotifyPanel";
@@ -25,6 +26,7 @@ const PAGE_TITLES = {
   chat: "Chat en Vivo",
   stickers: "Sonidos de Stickers",
   alerts: "Alertas",
+  entrances: "Entradas de Superfans",
   events: "Log de Eventos",
   overlay: "Overlays",
   automation: "Automatización",
@@ -101,6 +103,13 @@ function App() {
         return (
           <div className="main-content">
             <AlertsPanel />
+          </div>
+        );
+
+      case "entrances":
+        return (
+          <div className="main-content">
+            <EntrancesPanel />
           </div>
         );
 
