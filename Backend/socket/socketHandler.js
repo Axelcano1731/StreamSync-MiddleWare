@@ -18,6 +18,7 @@ import { initAvatarBattle, controlBattle } from '../services/avatarBattleService
 import { initMinecraftActions } from '../services/minecraftActionsService.js';
 import { initAlertMedia, emitAlertPreview } from '../services/alertMediaService.js';
 import { initEntrances, emitEntrancePreview } from '../services/entranceService.js';
+import { initGameActions } from '../services/gameActionsService.js';
 
 function emitConfig(io, config) {
   io.emit('alertConfig', config);
@@ -41,6 +42,7 @@ export default function socketHandler(io) {
   initMinecraftActions(io);
   initAlertMedia(io);
   initEntrances(io);
+  initGameActions(io);
   loadConfig();
   startSpotifyBroadcast();
 

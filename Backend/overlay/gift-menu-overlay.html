@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamSync — Menú de Regalos</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: transparent;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #fff; user-select: none;
+    }
+
+    #stage {
+      position: fixed; inset: 0;
+      display: flex; padding: 16px;
+      transform-origin: center center;
+    }
+    /* La posición del bloque en pantalla la fijan estas dos variables. */
+    #stage[data-h="left"]   { justify-content: flex-start; }
+    #stage[data-h="center"] { justify-content: center; }
+    #stage[data-h="right"]  { justify-content: flex-end; }
+    #stage[data-v="top"]    { align-items: flex-start; }
+    #stage[data-v="middle"] { align-items: center; }
+    #stage[data-v="bottom"] { align-items: flex-end; }
+
+    #board { display: flex; flex-direction: column; gap: 14px; }
+
+    #title {
+      font-weight: 900; text-align: center;
+      text-shadow: 0 4px 14px rgba(0,0,0,.75), 0 0 3px rgba(0,0,0,.9);
+      letter-spacing: .5px;
+    }
+    #title:empty { display: none; }
+
+    #grid { display: grid; }
+
+    /* ── Tarjeta ── */
+    .card {
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .18s ease;
+    }
+    .card.off { display: none; }
+
+    .card .box {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: fill;
+      filter: drop-shadow(0 6px 14px rgba(0,0,0,.5));
+    }
+    /* Caja por color plano cuando no se usa una imagen de caja. */
+    .card .box-color {
+      position: absolute; inset: 0;
+      border-radius: 18%;
+      box-shadow: 0 6px 14px rgba(0,0,0,.5), inset 0 0 0 3px rgba(255,255,255,.22);
+    }
+
+    .card .mon {
+      position: relative; z-index: 2;
+      width: 82%; height: 82%;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,.45));
+    }
+
+    /* Insignia del regalo, arriba a la derecha (como el overlay oficial). */
+    .card .gift {
+      position: absolute; z-index: 3;
+      top: -8%; right: -8%;
+      width: 34%; height: 34%;
+      object-fit: contain;
+      filter: drop-shadow(0 3px 6px rgba(0,0,0,.6));
+    }
+    .card .gift-emoji {
+      position: absolute; z-index: 3;
+      top: -6%; right: -6%;
+      width: 32%; height: 32%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 4.5vmin;
+      filter: drop-shadow(0 3px 6px rgba(0,0,0,.6));
+    }
+
+    /* Cantidad / condición, arriba a la izquierda ("X15"). */
+    .card .badge {
+      position: absolute; z-index: 4;
+      top: -7%; left: -5%;
+      padding: 2px 10px;
+      background: linear-gradient(180deg, #ff3b6b, #d81b47);
+      border: 2px solid rgba(255,255,255,.9);
+      border-radius: 999px;
+      font-weight: 900; font-size: 15px; line-height: 1.5;
+      text-shadow: 0 2px 3px rgba(0,0,0,.5);
+      white-space: nowrap;
+    }
+    .card .badge:empty { display: none; }
+
+    /* Etiqueta inferior. */
+    .card .label {
+      position: absolute; z-index: 4;
+      bottom: -14%; left: 50%; transform: translateX(-50%);
+      max-width: 118%;
+      font-weight: 800; font-size: 14px; text-align: center;
+      text-shadow: 0 3px 8px rgba(0,0,0,.85), 0 0 3px rgba(0,0,0,.9);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .card .label:empty { display: none; }
+
+    /* Contador de veces recibido. */
+    .card .count {
+      position: absolute; z-index: 4;
+      bottom: -6%; right: -6%;
+      min-width: 26px; padding: 1px 7px;
+      background: rgba(12,10,20,.9);
+      border: 2px solid rgba(255,255,255,.55);
+      border-radius: 999px;
+      font-weight: 900; font-size: 13px; text-align: center;
+    }
+    .card .count.hidden { display: none; }
+
+    /* ── Animaciones al recibir el regalo ── */
+    .card.anim-pulse  { animation: pulse .7s ease; }
+    .card.anim-shake  { animation: shake .6s ease; }
+    .card.anim-flash  { animation: flash .7s ease; }
+    .card.anim-bounce { animation: bounce .7s ease; }
+
+    @keyframes pulse {
+      0%   { transform: scale(1); }
+      35%  { transform: scale(1.22); filter: brightness(1.5); }
+      100% { transform: scale(1); }
+    }
+    @keyframes shake {
+      0%,100% { transform: translateX(0) }
+      20% { transform: translateX(-9px) rotate(-4deg) }
+      45% { transform: translateX(9px) rotate(4deg) }
+      70% { transform: translateX(-5px) rotate(-2deg) }
+    }
+    @keyframes flash {
+      0%   { filter: brightness(1); }
+      30%  { filter: brightness(2.4) saturate(1.6); }
+      100% { filter: brightness(1); }
+    }
+    @keyframes bounce {
+      0%,100% { transform: translateY(0) }
+      30% { transform: translateY(-22px) scale(1.1) }
+      60% { transform: translateY(0) scale(.96) }
+    }
+
+    /* Aviso flotante cuando alguien activa una tarjeta. */
+    .pop {
+      position: absolute; z-index: 6;
+      left: 50%; top: 6%;
+      transform: translateX(-50%);
+      padding: 3px 10px;
+      background: rgba(10,8,18,.88);
+      border: 2px solid rgba(255,255,255,.5);
+      border-radius: 999px;
+      font-weight: 800; font-size: 12px;
+      white-space: nowrap;
+      animation: floatUp 2.2s ease forwards;
+      pointer-events: none;
+    }
+    @keyframes floatUp {
+      0%   { opacity: 0; transform: translate(-50%, 10px) scale(.8); }
+      15%  { opacity: 1; transform: translate(-50%, -6px) scale(1); }
+      75%  { opacity: 1; transform: translate(-50%, -26px) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -42px) scale(.95); }
+    }
+
+    #empty {
+      padding: 20px 26px; border-radius: 14px;
+      background: rgba(12,10,20,.75);
+      border: 1px solid rgba(255,255,255,.15);
+      font-size: 15px; text-align: center; line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage" data-h="center" data-v="top">
+    <div id="board">
+      <div id="title"></div>
+      <div id="grid"></div>
+      <div id="empty" style="display:none">
+        Menú de regalos vacío.<br />
+        Configúralo en StreamSync → <b>Menú de Regalos</b>.
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // Estructura editable desde el dashboard (sección `giftMenu` de la config).
+    const DEFAULTS = {
+      enabled: true,
+      title: '',
+      titleSize: 30,
+      columns: 4,
+      cardSize: 200,
+      gap: 26,
+      hAlign: 'center',
+      vAlign: 'top',
+      scale: 1,
+      showLabels: true,
+      showCounters: true,
+      showPops: true,
+      animation: 'pulse',
+      items: [],
+    };
+
+    let config = { ...DEFAULTS };
+    const counters = {};   // veces que se activó cada tarjeta
+    const nodes = {};      // id de tarjeta -> elemento
+
+    const grid = document.getElementById('grid');
+    const stage = document.getElementById('stage');
+    const titleEl = document.getElementById('title');
+    const emptyEl = document.getElementById('empty');
+
+    // Normaliza nombres de regalo para comparar (sin acentos ni mayúsculas).
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+    // Las imágenes se guardan como ruta relativa (assets/...), data URL o URL
+    // completa; aquí las dejamos listas para el <img>.
+    function resolveSrc(value) {
+      const v = String(value || '').trim();
+      if (!v) return '';
+      if (/^(data:|https?:|\/)/i.test(v)) return v;
+      return '/overlay/' + v.replace(/^\/+/, '');
+    }
+
+    function render() {
+      const cfg = config;
+      const items = (cfg.items || []).filter((it) => it && it.enabled !== false);
+
+      stage.dataset.h = cfg.hAlign || 'center';
+      stage.dataset.v = cfg.vAlign || 'top';
+      stage.style.transform = `scale(${Number(cfg.scale) || 1})`;
+
+      titleEl.textContent = cfg.title || '';
+      titleEl.style.fontSize = (Number(cfg.titleSize) || 30) + 'px';
+
+      const size = Number(cfg.cardSize) || 200;
+      const gap = Number(cfg.gap) || 26;
+      grid.style.gridTemplateColumns = `repeat(${Math.max(1, Number(cfg.columns) || 4)}, ${size}px)`;
+      grid.style.gap = gap + 'px';
+      grid.style.rowGap = (gap + (cfg.showLabels ? 18 : 0)) + 'px';
+
+      grid.innerHTML = '';
+      for (const key of Object.keys(nodes)) delete nodes[key];
+
+      emptyEl.style.display = items.length ? 'none' : 'block';
+      if (!cfg.enabled) {
+        grid.innerHTML = '';
+        emptyEl.style.display = 'none';
+        titleEl.textContent = '';
+        return;
+      }
+
+      for (const item of items) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.width = size + 'px';
+        card.style.height = size + 'px';
+
+        // Caja de fondo: imagen del pack o color plano.
+        const boxSrc = resolveSrc(item.box);
+        if (boxSrc) {
+          const box = document.createElement('img');
+          box.className = 'box';
+          box.src = boxSrc;
+          card.appendChild(box);
+        } else if (item.boxColor) {
+          const box = document.createElement('div');
+          box.className = 'box-color';
+          box.style.background = item.boxColor;
+          card.appendChild(box);
+        }
+
+        const monSrc = resolveSrc(item.icon);
+        if (monSrc) {
+          const mon = document.createElement('img');
+          mon.className = 'mon';
+          mon.src = monSrc;
+          card.appendChild(mon);
+        }
+
+        // Insignia del regalo (imagen de TikTok o emoji).
+        const giftSrc = resolveSrc(item.giftImage);
+        if (giftSrc) {
+          const gift = document.createElement('img');
+          gift.className = 'gift';
+          gift.src = giftSrc;
+          card.appendChild(gift);
+        } else if (item.giftEmoji) {
+          const gift = document.createElement('div');
+          gift.className = 'gift-emoji';
+          gift.textContent = item.giftEmoji;
+          card.appendChild(gift);
+        }
+
+        const badge = document.createElement('div');
+        badge.className = 'badge';
+        badge.textContent = item.badge || '';
+        card.appendChild(badge);
+
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = cfg.showLabels ? (item.label || '') : '';
+        label.style.width = size + 'px';
+        card.appendChild(label);
+
+        const count = document.createElement('div');
+        count.className = 'count' + (cfg.showCounters ? '' : ' hidden');
+        count.textContent = counters[item.id] || 0;
+        card.appendChild(count);
+
+        grid.appendChild(card);
+        nodes[item.id] = card;
+      }
+    }
+
+    // ── Reacción a los eventos del directo ──
+    function trigger(item, who) {
+      const card = nodes[item.id];
+      if (!card) return;
+
+      counters[item.id] = (counters[item.id] || 0) + 1;
+      const count = card.querySelector('.count');
+      if (count) count.textContent = counters[item.id];
+
+      const anim = 'anim-' + (config.animation || 'pulse');
+      card.classList.remove('anim-pulse', 'anim-shake', 'anim-flash', 'anim-bounce');
+      void card.offsetWidth; // reinicia la animación si se repite rápido
+      if (config.animation && config.animation !== 'none') card.classList.add(anim);
+
+      if (config.showPops && who) {
+        const pop = document.createElement('div');
+        pop.className = 'pop';
+        pop.textContent = who;
+        card.appendChild(pop);
+        setTimeout(() => pop.remove(), 2300);
+      }
+    }
+
+    // ¿Qué tarjetas responden a este evento?
+    function matchItems(eventType, data) {
+      return (config.items || []).filter((item) => {
+        if (!item || item.enabled === false) return false;
+        const t = item.trigger || 'gift';
+        if (t !== eventType) return false;
+        if (eventType !== 'gift') return true;
+
+        // Regalo: por id exacto si está puesto, si no por nombre. Sin ninguno
+        // de los dos la tarjeta responde a cualquier regalo.
+        if (item.giftId) return String(item.giftId) === String(data.giftId || '');
+        if (item.giftName) return norm(item.giftName) === norm(data.giftName);
+        return true;
+      });
+    }
+
+    function handleEvent(eventType, data) {
+      const who = data && data.uniqueId ? data.uniqueId : '';
+      for (const item of matchItems(eventType, data || {})) trigger(item, who);
+    }
+
+    // ── Socket ──
+    const socket = io(); // mismo origen (http://localhost:3000)
+
+    function applyConfig(cfg) {
+      if (!cfg) return;
+      config = { ...DEFAULTS, ...(cfg.giftMenu || {}) };
+      render();
+    }
+
+    socket.on('connect', () => {
+      socket.emit('getAlertConfig', applyConfig);
+    });
+
+    socket.on('alertConfig', applyConfig);
+
+    socket.on('gift', (d) => handleEvent('gift', d));
+    socket.on('like', (d) => handleEvent('like', d));
+    socket.on('follow', (d) => handleEvent('follow', d));
+    socket.on('share', (d) => handleEvent('share', d));
+    socket.on('subscribe', (d) => handleEvent('subscribe', d));
+
+    // Vista previa desde el dashboard: resalta una tarjeta concreta.
+    socket.on('giftMenuPreview', (payload) => {
+      const item = (config.items || []).find((it) => it.id === (payload && payload.id));
+      if (item) trigger(item, (payload && payload.user) || 'prueba');
+    });
+
+    render();
+  </script>
+</body>
+</html>

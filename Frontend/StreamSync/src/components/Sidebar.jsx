@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { key: "overlay", icon: "🎨", label: "Overlays" },
   { key: "automation", icon: "🧩", label: "Automatización" },
   { key: "minecraft", icon: "⛏️", label: "Minecraft" },
+  { key: "games", icon: "🎮", label: "Juegos (Webhooks)" },
+  { key: "giftMenu", icon: "🃏", label: "Menú de Regalos" },
   { key: "spotify", icon: "🎵", label: "Spotify" },
   { key: "wordle", icon: "🟩", label: "Wordle" },
 ];

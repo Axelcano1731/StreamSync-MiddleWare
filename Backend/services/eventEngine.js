@@ -5,6 +5,7 @@ import { handleMinecraftActions } from './minecraftActionsService.js';
 import { handleEvent as handleAvatarBattle } from './avatarBattleService.js';
 import { handleAlertEvent } from './alertMediaService.js';
 import { handleEntranceEvent } from './entranceService.js';
+import { handleGameActions } from './gameActionsService.js';
 
 /**
  * Event Engine — Processes stream events through configurable rules
@@ -360,6 +361,13 @@ export function processEvent(eventType, data) {
   // visual este apagada.
   handleMinecraftActions(eventType, data).catch((err) => {
     console.warn('Error en acciones de Minecraft:', err.message);
+  });
+
+  // Juegos externos: traduce el evento en llamadas a los webhooks locales del
+  // juego (League of Monsters y compañía). Va antes del check de alertas para
+  // que el juego reaccione aunque la alerta visual esté apagada.
+  handleGameActions(eventType, data).catch((err) => {
+    console.warn('Error en acciones de juego:', err.message);
   });
 
   // Avatar Battle: traduce gifts/likes en acciones del juego (overlay web).

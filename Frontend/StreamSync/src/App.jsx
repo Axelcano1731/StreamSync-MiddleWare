@@ -15,6 +15,8 @@ import OverlayPanel from "./components/OverlayPanel";
 import SpotifyPanel from "./components/SpotifyPanel";
 import AutomationPanel from "./components/AutomationPanel";
 import MinecraftPanel from "./components/MinecraftPanel";
+import GamesPanel from "./components/GamesPanel";
+import GiftMenuPanel from "./components/GiftMenuPanel";
 import { VoiceSettings } from "./components/VoiceSettings";
 import WordlePanel from "./components/WordlePanel";
 import ChatPanel from "./components/ChatPanel";
@@ -31,6 +33,8 @@ const PAGE_TITLES = {
   overlay: "Overlays",
   automation: "Automatización",
   minecraft: "Minecraft",
+  games: "Juegos (Webhooks)",
+  giftMenu: "Menú de Regalos",
   spotify: "Spotify",
   wordle: "StreamWordle",
   settings: "Configuración",
@@ -139,6 +143,20 @@ function App() {
         return (
           <div className="main-content">
             <MinecraftPanel />
+          </div>
+        );
+
+      case "games":
+        return (
+          <div className="main-content">
+            <GamesPanel />
+          </div>
+        );
+
+      case "giftMenu":
+        return (
+          <div className="main-content">
+            <GiftMenuPanel />
           </div>
         );
 

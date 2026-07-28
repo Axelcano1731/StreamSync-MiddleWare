@@ -9,6 +9,7 @@ import spotifyRoutes from './routes/spotifyRoutes.js';
 import stickerSoundsRoutes from './routes/stickerSoundsRoutes.js';
 import alertMediaRoutes from './routes/alertMediaRoutes.js';
 import entranceRoutes from './routes/entranceRoutes.js';
+import gameActionsRoutes from './routes/gameActionsRoutes.js';
 import ttsRoutes from './routes/ttsRoutes.js';
 import { processEvent } from './services/eventEngine.js';
 import { controlBattle } from './services/avatarBattleService.js';
@@ -53,6 +54,7 @@ function createApp() {
   app.use('/api/sticker-sounds', stickerSoundsRoutes);
   app.use('/api/alert-media', alertMediaRoutes);
   app.use('/api/entrances', entranceRoutes);
+  app.use('/api/game-actions', gameActionsRoutes);
   app.use('/api/tts', ttsRoutes);
 
   // Rutas de prueba locales (simular eventos sin live). Desactivar en produccion.
